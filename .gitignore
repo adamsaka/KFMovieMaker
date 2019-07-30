@@ -1,0 +1,6 @@
+**/AfterEffectsSDK
+**/Build
+*.db
+*.filters
+*.user
+*.aps
