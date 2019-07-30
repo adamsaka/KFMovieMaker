@@ -1,2 +1,3 @@
 # KFMovieMaker
-KFMovieMaker - After Effects Plug-in for Kalles Fraktaler
+An After Effects plug-in to create fractal videos from Kalles Frakaler.
+
