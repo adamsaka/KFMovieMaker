@@ -4,3 +4,4 @@
 *.filters
 *.user
 *.aps
+**/Win/.vs
