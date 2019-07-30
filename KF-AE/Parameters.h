@@ -17,6 +17,10 @@ enum class ParameterID : long {
 	insideColour,
 	distanceClamp,
 	colourOffset,
+	slopesEnabled,
+	slopeShadowDepth,
+	slopeStrength,
+	slopeAngle,
 	__last,
 };
 

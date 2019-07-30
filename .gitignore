@@ -4,4 +4,5 @@
 *.filters
 *.user
 *.aps
+*.opendb
 **/Win/.vs

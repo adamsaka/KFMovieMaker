@@ -16,6 +16,7 @@ static void AddCheckBox(ParameterID id, const char * name, const char * comment,
 static void AddGroupStart(ParameterID id, const char * name, PF_ParamFlags flags = 0);
 static void AddGroupEnd(ParameterID id);
 static void AddColourPicker(ParameterID id, const char * name, unsigned char red = 0, unsigned char green = 0, unsigned char blue = 0, PF_ParamFlags flags = 0);
+static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags=0);
 inline long useParam(ParameterID p);
 
 
@@ -46,6 +47,12 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddGroupStart(ParameterID::topic_start_insideColour, "Colours (Inside)");
 	AddColourPicker(ParameterID::insideColour, "Inside Colour");
 	AddGroupEnd(ParameterID::topic_end_insideColour);
+	AddGroupStart(ParameterID::topic_start_slopes, "Slopes");
+	AddCheckBox(ParameterID::slopesEnabled, "Slopes Enbaled", "", false);
+	AddSlider(ParameterID::slopeShadowDepth, "Shadow Depth", 0, 100, 0, 100, 100, PF_Precision_TENTHS);
+	AddSlider(ParameterID::slopeStrength, "Shadow Strength", 0, 100, 0, 100, 20, PF_Precision_TENTHS);
+	AddAngle(ParameterID::slopeAngle, "Shadow Angle", 45);
+	AddGroupEnd(ParameterID::topic_end_slopes);
 
 	out_data->num_params = paramsAdded;
 	return err;
@@ -256,6 +263,25 @@ static void AddColourPicker(ParameterID id, const char * name, unsigned char red
 	return;
 }
 
+
+/*******************************************************************************************************
+Adds a angle parameter
+value is in degrees
+*******************************************************************************************************/
+static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags) {
+	PF_ParamDef	def {};	//Must be zero initialised.
+	def.param_type = PF_Param_ANGLE;
+	strncpy_s(def.name, name, sizeof(def.name));
+	def.uu.id = static_cast<long>(id);
+	def.flags = flags;
+	def.u.ad.value = value<< 16;
+	def.u.ad.dephault = def.u.ad.value;
+	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
+	if(err) throw(err);
+	useParam(id);
+	return;
+}
+
 /*******************************************************************************************************
 Reads the value of a float slider parameter.  
 Uses check-in/check-out, so this is ok to use during a smart-render call.
@@ -317,3 +343,4 @@ RGB readColour(PF_InData *in_data, ParameterID paramID) {
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
 	return value;
 }
+
