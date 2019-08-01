@@ -30,9 +30,7 @@ PF_Err ParameterChanged(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*p
 
 
 double readFloatSliderParam(PF_InData * in_data, ParameterID parameterNumber);
-
 long readListParam(PF_InData * in_data, ParameterID parameterNumber);
-
 bool readCheckBoxParam(PF_InData * in_data, ParameterID parameterNumber);
-
-RGB readColour(PF_InData * in_data, ParameterID paramID);
+RGB readColourParam(PF_InData * in_data, ParameterID paramID);
+double readAngleParam(PF_InData * in_data, ParameterID paramID);

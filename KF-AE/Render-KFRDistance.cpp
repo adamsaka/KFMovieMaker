@@ -74,6 +74,32 @@ double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* loc
 	return iter;
 }
 
+void doSlopes(float p[][3], LocalSequenceData* local, double& r, double& g, double& b) {
+	float diffx = (p[0][1] - p[1][1]);
+	float diffy = (p[1][0] - p[1][1]);
+	double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
+	
+	double p1 = fmax(1, p[1][1]);
+	diff = (p1 + diff) / p1;
+	diff = pow(diff, local->slopeShadowDepth * std::log(p[1][1]/10000+1) * (local->width)); //Arbitrary choice, need to inspect KF code 
+	
+	if(diff>1) {
+		diff = (atan(diff) - pi / 4) / (pi / 4);
+		diff = diff*local->slopeStrength / 100;
+		r = (1 - diff)*r;
+		g = (1 - diff)*g;
+		b = (1 - diff)*b;
+	}
+	else {
+		diff = 1 / diff;
+		diff = (atan(diff) - pi / 4) / (pi / 4);
+		diff = diff*local->slopeStrength / 100;;
+		r = (1 - diff)*r + diff;
+		g = (1 - diff)*g + diff;
+		b = (1 - diff)*b + diff;
+		
+	}
+}
 
 PF_Err Render_KFRDistance::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
 	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
@@ -117,6 +143,20 @@ PF_Err Render_KFRDistance::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 
 	out->red = roundTo8Bit(r);
 	out->green = roundTo8Bit(g);
 	out->blue = roundTo8Bit(b);
+
+
+
+	if(local->slopesEnabled) {
+		r /=  255.0;
+		g /=  255.0;
+		b /= 255.0;
+		doSlopes(distance,local,r,g,b);
+		out->red = roundTo8Bit(r * 255);
+		out->green = roundTo8Bit(g * 255);
+		out->blue = roundTo8Bit(b * 255);
+	}
+
+
 	return PF_Err_NONE;
 }
 

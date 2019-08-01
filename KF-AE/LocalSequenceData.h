@@ -49,6 +49,12 @@ class LocalSequenceData {
 		RGB insideColour {};
 		double distanceClamp {0};
 		double colourOffset {0};
+		bool slopesEnabled {false};
+		double slopeShadowDepth {0};
+		double slopeStrength {0};
+		double slopeAngle {0};
+		double slopeAngleX {0};
+		double slopeAngleY {0};
 		
 		std::shared_ptr<KFBData> activeKFB {nullptr};
 		long activeFrameNumber {-1};
@@ -75,6 +81,10 @@ class LocalSequenceData {
 			cache_insideColour = insideColour;
 			cache_distanceClamp = distanceClamp;
 			cache_colourOffset = colourOffset;
+			cache_slopesEnabled = slopesEnabled;
+			cache_slopeShadowDepth = slopeShadowDepth;
+			cache_slopeStrength = slopeStrength;
+			cache_slopeAngle = slopeAngle;
 		};
 
 		///Check if any parameters that would invalidate the cache have changed
@@ -88,7 +98,12 @@ class LocalSequenceData {
 				cache_bitDepth == bitDepth &&
 				cache_insideColour == insideColour &&
 				cache_colourOffset == colourOffset &&
-				cache_distanceClamp == distanceClamp
+				cache_distanceClamp == distanceClamp &&
+				cache_slopesEnabled == slopesEnabled &&
+				cache_slopeShadowDepth == slopeShadowDepth &&
+				cache_slopeStrength == slopeStrength &&
+				cache_slopeAngle == slopeAngle
+					
 				);
 		}
 		
@@ -104,6 +119,10 @@ private:
 		RGB cache_insideColour {};
 		double cache_distanceClamp {0};
 		double cache_colourOffset {0};
+		bool cache_slopesEnabled {false};
+		double cache_slopeShadowDepth {0};
+		double cache_slopeStrength {0};
+		double cache_slopeAngle {0};
 
 		void clear();
 		void getKFBlist();

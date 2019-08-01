@@ -17,6 +17,7 @@ static void AddGroupStart(ParameterID id, const char * name, PF_ParamFlags flags
 static void AddGroupEnd(ParameterID id);
 static void AddColourPicker(ParameterID id, const char * name, unsigned char red = 0, unsigned char green = 0, unsigned char blue = 0, PF_ParamFlags flags = 0);
 static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags=0);
+
 inline long useParam(ParameterID p);
 
 
@@ -274,13 +275,30 @@ static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFla
 	strncpy_s(def.name, name, sizeof(def.name));
 	def.uu.id = static_cast<long>(id);
 	def.flags = flags;
-	def.u.ad.value = value<< 16;
+	def.u.ad.value = value<< 16;  //convert to fixed point
 	def.u.ad.dephault = def.u.ad.value;
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
 	return;
 }
+
+/*******************************************************************************************************
+Reads the value an angle paramter (in degrees) as a double.
+Note: May be multple of 360
+*******************************************************************************************************/
+double readAngleParam(PF_InData *in_data, ParameterID paramID) {
+	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
+	if(parameterLocation == 0) throw ("Invalid request in readAngle");
+	PF_ParamDef param {};
+	AEFX_CLR_STRUCT(param);
+	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
+	long valueLong = param.u.ad.value;  //this is a fixed point
+	in_data->inter.checkin_param(in_data->effect_ref, &param);
+	double value = static_cast<double>(valueLong) / 65536.0;
+	return value;
+}
+
 
 /*******************************************************************************************************
 Reads the value of a float slider parameter.  
@@ -330,9 +348,9 @@ bool readCheckBoxParam(PF_InData *in_data, ParameterID paramID) {
 /*******************************************************************************************************
 
 *******************************************************************************************************/
-RGB readColour(PF_InData *in_data, ParameterID paramID) {
+RGB readColourParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
-	if(parameterLocation == 0) throw ("Invalid request in readColour");
+	if(parameterLocation == 0) throw ("Invalid request in readColourParam");
 	PF_ParamDef param;
 	AEFX_CLR_STRUCT(param);
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);

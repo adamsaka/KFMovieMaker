@@ -16,6 +16,7 @@ constexpr unsigned short black16 = 0;
 constexpr unsigned short white16 = 0x8000;
 constexpr float black32 = 0.0;
 constexpr float white32 = 1.0;
+constexpr double pi = 3.14159265358979323846;
 
 PF_Err SmartPreRender(PF_InData * in_data, PF_OutData * out_data, PF_PreRenderExtra* preRender);
 PF_Err SmartRender(PF_InData * in_data, PF_OutData * out_data,  PF_SmartRenderExtra* smartRender);

@@ -14,6 +14,8 @@ Rendering Functions
 #include "Render-KFRColouring.h"
 #include "Render-KFRDistance.h"
 
+#include <cmath>
+
 typedef PF_Err(*PixelFunction8)(void *refcon, A_long x, A_long y, PF_Pixel8 *in, PF_Pixel8 *out);
 typedef PF_Err(*PixelFunction16)(void* refcon, A_long x, A_long y, PF_Pixel16 *in, PF_Pixel16 *out);
 typedef PF_Err(*PixelFunction32)(void* refcon, A_long x, A_long y, PF_Pixel32 *in, PF_Pixel32 *out);
@@ -22,8 +24,7 @@ static void setMaxOuputRectangle(PF_PreRenderExtra* preRender, long left, long r
 static void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long right, long top, long bottom);
 static PF_Err SetToBlack8(void *refcon, A_long xL, A_long yL, PF_Pixel8 *inP, PF_Pixel8 *outP);
 static PF_Err SetToBlack16(void *refcon, A_long xL, A_long yL, PF_Pixel16 *inP, PF_Pixel16 *outP);
-unsigned char roundTo8Bit(float f);
-static PF_Err Pixel8Linear(void *refcon, A_long x, A_long y, PF_Pixel8 *in, PF_Pixel8 *out);
+
 
 
 /*******************************************************************************************************
@@ -286,9 +287,18 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 	local->modifier = readListParam(in_data, ParameterID::modifier);
 	local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
 	local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
-	local->insideColour = readColour(in_data, ParameterID::insideColour);
+	local->insideColour = readColourParam(in_data, ParameterID::insideColour);
 	local->colourOffset = readFloatSliderParam(in_data, ParameterID::colourOffset);
 	local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
+	local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
+	if(local->slopesEnabled) {
+		local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
+		local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
+		local->slopeAngle = readAngleParam(in_data,ParameterID::slopeAngle);
+		double angleRadians = local->slopeAngle * pi / 180;
+		local->slopeAngleX = cos(angleRadians);
+		local->slopeAngleY = sin(angleRadians);
+	}
 
 	//Setup data for active frame, and next frame.
 	long activeFrame = static_cast<long>(std::floor(keyFrame));
@@ -299,6 +309,7 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 	local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
 	local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
 	local->bitDepth = smartRender->input->bitdepth;
+
 
 	//Checkout Output buffer
 	PF_EffectWorld* output {nullptr};
