@@ -494,6 +494,8 @@ Output parameters: highColour, lowColour, mixWeight
 void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour, RGB & lowColour, double & mixWeight) {
 	auto nColours = local->numKFRColours;
 	if(nColours == 0) nColours = 1;
+	iCount *= static_cast<double>(nColours) / static_cast<double>(colourRange);  //Scale pallette like KF
+
 	double rem = std::fmod(iCount, static_cast<double>(nColours));
 	unsigned long lowColourIndex = static_cast<unsigned long>(std::floor(rem));
 	if(lowColourIndex > nColours - 1) lowColourIndex = nColours - 1;
@@ -509,7 +511,7 @@ Adds slopes colour calculations to r,g,b
 r,g,b are colour values from 0.0 to 1.0
 p[x][y] is a maxtrix of itaration values around point p[1][1] (may be a minimal cross)
 *******************************************************************************************************/
-void doSlopes(float p[][3], LocalSequenceData* local, double& r, double& g, double& b) {
+void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g, double& b) {
 	float diffx = (p[0][1] - p[2][1])/2.0f ;
 	float diffy = (p[1][0] - p[1][2])/2.0f ;
 	double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;

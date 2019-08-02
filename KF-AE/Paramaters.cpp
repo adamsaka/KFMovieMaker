@@ -61,7 +61,7 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddGroupStart(ParameterID::topic_start_colour, "Colours (Outside)");
 	AddDropDown(ParameterID::colourMethod, "Colour Method", "Standard (.kfr Colours)|Distance Estimation (.kfr Colours)|(-|Black and White Wave",1, PF_ParamFlag_CANNOT_TIME_VARY );
 	AddDropDown(ParameterID::modifier, "Modifier", "Linear|Square Root|Cubic Root|Logarithm", 1);
-	AddSlider(ParameterID::colourDivision, "Iteration Division", 0, 1000,0,1000, 1, PF_Precision_TEN_THOUSANDTHS);
+	AddSlider(ParameterID::colourDivision, "Iteration Division", 0, 1024,0, 1024, 1, PF_Precision_TEN_THOUSANDTHS);
 	AddCheckBox(ParameterID::smooth, "Smooth Colouring", "", true);
 	AddSlider(ParameterID::colourOffset, "Colour Offset", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
 	AddSlider(ParameterID::distanceClamp, "Distance Clamp", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
