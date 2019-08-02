@@ -33,7 +33,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include <cassert>
 
 inline long clampToLong(float d, long max);
-inline long calcIndexAndClamp(long x, long y, long width, long height);
 inline float BiLinearIterpolation(float x, float y, float ul, float ur, float ll, float lr);
 inline float biCubicIterpolation(const float values[][4], float x, float y);
 
@@ -260,29 +259,14 @@ The value is the weighted value of the surrounding pixels.
 Returns the nearest edge pixel if requeted pixel is out of bounds
 //Note: Only Smooth
 *******************************************************************************************************/
-float KFBData::calculateIterationCountBiLinear(float x, float y) {
-	x += paddingSize;
-	y += paddingSize;
-	const float floorX = std::floor(x);
-	const float floorY = std::floor(y);
-	const long xl = clampToLong(floorX, memWidth - 1);
-	const long yl = clampToLong(floorY, memHeight - 1);
-
-	//If we are passed an integer pixel, no need to Interpolate. (always the case building cache)
-	if(floorX == x && floorY == y) {
-		return smoothValue(xl, yl);
-	}
-	float ul, ur, ll, lr;
-	
-	ul = smoothValue(xl,   yl);
-	ur = smoothValue(xl+1, yl);
-	ll = smoothValue(xl,   yl+1);
-	lr = smoothValue(xl+1, yl+1);		
-
-	
-	return BiLinearIterpolation(x, y, ul, ur, ll, lr);
+inline float KFBData::calculateIterationCountBiLinear(float x, float y) {
+	return calculateIterationCountBiLinearNoPad(x + paddingSize, y + paddingSize);
 }
 
+
+/*******************************************************************************************************
+BiLinear with values already padded.
+*******************************************************************************************************/
 float KFBData::calculateIterationCountBiLinearNoPad(float x, float y) {
 	const float floorX = std::floor(x);
 	const float floorY = std::floor(y);
@@ -306,8 +290,9 @@ float KFBData::calculateIterationCountBiLinearNoPad(float x, float y) {
 
 /*******************************************************************************************************
 Gets a matrix of 9 pixel values surrounding (x,y)
+If "minimal", we just calculate a cross, not all 9 values.
 *******************************************************************************************************/
-void  KFBData::getDistanceMatrix(float p[][3], float x, float y, float step) {
+void  KFBData::getDistanceMatrix(float p[][3], float x, float y, float step, bool minimal) {
 	x += paddingSize;
 	y += paddingSize;
 	auto xMinusStep = std::max(0.0f, x - step);
@@ -315,37 +300,51 @@ void  KFBData::getDistanceMatrix(float p[][3], float x, float y, float step) {
 	auto yMinusStep = std::max(0.0f, y - step);
 	auto yPlusStep = std::min(static_cast<float>(memHeight - 1), y + step);
 
-	p[0][0] = calculateIterationCountBiLinearNoPad(xMinusStep, yMinusStep);
+	
 	p[1][0] = calculateIterationCountBiLinearNoPad(x, yMinusStep);
-	p[2][0] = calculateIterationCountBiLinearNoPad(xPlusStep, yMinusStep);
 	p[0][1] = calculateIterationCountBiLinearNoPad(xMinusStep, y);
 	p[1][1] = calculateIterationCountBiLinearNoPad(x, y);
 	p[2][1] = calculateIterationCountBiLinearNoPad(xPlusStep, y);
-	p[0][2] = calculateIterationCountBiLinearNoPad(xMinusStep, yPlusStep);
 	p[1][2] = calculateIterationCountBiLinearNoPad(x, yPlusStep);
-	p[2][2] = calculateIterationCountBiLinearNoPad(xPlusStep, yPlusStep);
+	
+	if(!minimal) {
+		p[0][0] = calculateIterationCountBiLinearNoPad(xMinusStep, yMinusStep);
+		p[2][0] = calculateIterationCountBiLinearNoPad(xPlusStep, yMinusStep);
+		p[0][2] = calculateIterationCountBiLinearNoPad(xMinusStep, yPlusStep);
+		p[2][2] = calculateIterationCountBiLinearNoPad(xPlusStep, yPlusStep);
+	}
+
 
 	//Mirror to correct edge pixel
 	if(step > 1.0f) {
 		if(x - step < 0) {
-			p[0][0] = p[2][0];
 			p[0][1] = p[2][1];
-			p[0][2] = p[2][2];
+			if(!minimal) {
+				p[0][0] = p[2][0];
+				p[0][2] = p[2][2];
+			}
 		}
 		if(x + step > memWidth - 1) {
-			p[2][0] = p[0][0];
 			p[2][1] = p[0][1];
-			p[2][2] = p[0][2];
+			if(!minimal) {
+				p[2][0] = p[0][0];
+				p[2][2] = p[0][2];
+			}
+
 		}
 		if(y - step < 0) {
-			p[0][0] = p[0][2];
 			p[1][0] = p[1][2];
-			p[2][0] = p[2][2];
+			if(!minimal) {
+				p[0][0] = p[0][2];
+				p[2][0] = p[2][2];
+			}
 		}
 		if(y + step > memHeight - 1) {
-			p[0][2] = p[0][0];
 			p[1][2] = p[1][0];
-			p[2][2] = p[2][0];
+			if(!minimal) {
+				p[0][2] = p[0][0];
+				p[2][2] = p[2][0];
+			}
 		}
 	}
 

@@ -29,39 +29,13 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Render.h"
 
 
-inline void fillDistanceScale(float p[][3], A_long x, A_long y, const LocalSequenceData* local) {
-	float step = 0.5;
-	
-	//Calculate pixel location.
-	double halfWidth = static_cast<double>(local->width) / 2.0f;
-	double halfHeight = static_cast<double>(local->height) / 2.0f;
-	double xCentre = (x * local->scaleFactorX) - halfWidth;
-	double yCentre = (y * local->scaleFactorY) - halfHeight;
-	double xLocation = xCentre / local->activeZoomScale + halfWidth;
-	double yLocation = yCentre / local->activeZoomScale + halfHeight;
-	float xf = static_cast<float>(xLocation);
-	float yf = static_cast<float>(yLocation);
-	
-	float adjustX = xf / static_cast<float>(local->scaleFactorX);
-	float adjustY = yf / static_cast<float>(local->scaleFactorY);
-	
-	float distanceToEdgeX = std::min(xf, local->width - xf);
-	float distanceToEdgeY = std::min(yf, local->height - yf);
-	float distanceToEdge = std::min(distanceToEdgeX, distanceToEdgeY);
-	//Assumes zoom size 2
-	
-	float percentX = (distanceToEdgeX / static_cast<float>(local->width / 4));
-	float percentY = (distanceToEdgeY / static_cast<float>(local->height / 4));
-	float percent = std::min(percentX, percentY);
-	step = std::exp(-std::log(2.0f)*percent);
-	
-	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step);
-
-}
 
 
-double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale=true) {
-	
+
+/*******************************************************************************************************
+Perform distance calculation
+*******************************************************************************************************/
+inline double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale=true) {
 	
 	//Traditional
 	double gx = (p[0][1] - p[1][1]) ;
@@ -74,32 +48,7 @@ double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* loc
 	return iter;
 }
 
-void doSlopes(float p[][3], LocalSequenceData* local, double& r, double& g, double& b) {
-	float diffx = (p[0][1] - p[1][1]);
-	float diffy = (p[1][0] - p[1][1]);
-	double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
-	
-	double p1 = fmax(1, p[1][1]);
-	diff = (p1 + diff) / p1;
-	diff = pow(diff, local->slopeShadowDepth * std::log(p[1][1]/10000+1) * (local->width)); //Arbitrary choice, need to inspect KF code 
-	
-	if(diff>1) {
-		diff = (atan(diff) - pi / 4) / (pi / 4);
-		diff = diff*local->slopeStrength / 100;
-		r = (1 - diff)*r;
-		g = (1 - diff)*g;
-		b = (1 - diff)*b;
-	}
-	else {
-		diff = 1 / diff;
-		diff = (atan(diff) - pi / 4) / (pi / 4);
-		diff = diff*local->slopeStrength / 100;;
-		r = (1 - diff)*r + diff;
-		g = (1 - diff)*g + diff;
-		b = (1 - diff)*b + diff;
-		
-	}
-}
+
 
 /*******************************************************************************************************
 The initial render calculations, common to all bit depths.
@@ -112,11 +61,11 @@ inline double RenderCommon(const LocalSequenceData * local, float distance[][3],
 	if(iCount >= local->activeKFB->maxIterations)  return -1;
 
 	
-	if(local->nextZoomScale > 0) {
-		GetBlendedDistanceMatrix(distance, local, x, y);
+	if(local->scalingMode == 1) {
+		getDistanceIntraFrame(distance, x, y, local);		
 	}
 	else {
-		fillDistanceScale(distance, x, y, local);
+		GetBlendedDistanceMatrix(distance, local, x, y);
 	}
 
 	iCount = doDistance(distance, x, y, local);

@@ -75,6 +75,7 @@ class LocalSequenceData {
 		std::shared_ptr<KFBData> nextFrameKFB {nullptr};
 		long nextFrameNumber {-1};
 		double nextZoomScale {2};
+		
 
 		LocalSequenceData();
 

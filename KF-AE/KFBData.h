@@ -66,7 +66,7 @@ class KFBData {
 		float calculateIterationCountBiCubic(float x, float y, bool smooth = true);
 		float calculateIterationCountBiLinear(float x, float y);
 		float calculateIterationCountBiLinearNoPad(float x, float y);
-		void getDistanceMatrix(float p[][3], float x, float y, float step);
+		void getDistanceMatrix(float p[][3], float x, float y, float step, bool minimal=false);
 		
 		
 		void DisposeOfCache();

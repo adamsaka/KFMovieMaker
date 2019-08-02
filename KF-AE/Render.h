@@ -32,6 +32,8 @@ PF_Err SmartRender(PF_InData * in_data, PF_OutData * out_data,  PF_SmartRenderEx
 double doModifier(long modifier, double it);
 void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData * local, A_long x, A_long y);
 double GetBlendedPixelValue(const LocalSequenceData* local, A_long x, A_long y);
+void doSlopes(float p[][3], LocalSequenceData * local, double & r, double & g, double & b);
+void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequenceData * local, bool minimal = false);
 PF_Err NonSmartRender(PF_InData *in_data, PF_OutData *out_data, PF_ParamDef *params[], PF_LayerDef	*output);
 unsigned char roundTo8Bit(double f);
 unsigned short roundTo16Bit(double f);

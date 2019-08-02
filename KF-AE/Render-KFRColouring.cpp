@@ -45,6 +45,23 @@ PF_Err Render_KFRColouring::Render8(void * refcon, A_long x, A_long y, PF_Pixel8
 	double g = lowColour.green * (1 - mixWeight) + highColour.green* mixWeight;
 	double b = lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight;
 	
+	if(local->slopesEnabled) {
+		float distance[3][3];
+		if(local->scalingMode == 1) {
+			getDistanceIntraFrame(distance, x, y, local,true);
+		}
+		else {
+			GetBlendedDistanceMatrix(distance, local, x, y);
+		}
+		r /= 255.0;
+		g /= 255.0;
+		b /= 255.0;
+		doSlopes(distance, local, r, g, b);
+		r *= white8;
+		g *= white8;
+		b *= white8;
+	}
+
 	out->alpha = white8;
 	out->red = roundTo8Bit(r);
 	out->green = roundTo8Bit(g);
@@ -77,9 +94,32 @@ PF_Err Render_KFRColouring::Render16(void * refcon, A_long x, A_long y, PF_Pixel
 
 	//Mix Colours
 	
-	double r = lowColour.red * colourScale * (1 - mixWeight) + highColour.red * colourScale* mixWeight;
-	double g = lowColour.green * colourScale * (1 - mixWeight) + highColour.green * colourScale * mixWeight;
-	double b = lowColour.blue * colourScale * (1 - mixWeight) + highColour.blue * colourScale *mixWeight;
+	double r = lowColour.red * (1 - mixWeight) + highColour.red * mixWeight;
+	double g = lowColour.green* (1 - mixWeight) + highColour.green  * mixWeight;
+	double b = lowColour.blue * (1 - mixWeight) + highColour.blue  *mixWeight;
+
+	if(local->slopesEnabled) {
+		float distance[3][3];
+		if(local->scalingMode == 1) {
+			getDistanceIntraFrame(distance, x, y, local, true);
+		}
+		else {
+			GetBlendedDistanceMatrix(distance, local, x, y);
+		}
+		r /= 255.0;
+		g /= 255.0;
+		b /= 255.0;
+		doSlopes(distance, local, r, g, b);
+		r *= white16;
+		g *= white16;
+		b *= white16;
+	}
+	else {
+		r *= colourScale;
+		g *= colourScale;
+		b *= colourScale;
+	}
+
 
 	out->alpha = white16;
 	out->red = roundTo16Bit(r);
@@ -114,6 +154,18 @@ PF_Err Render_KFRColouring::Render32(void * refcon, A_long x, A_long y, PF_Pixel
 	double r = lowColour.red * colourScale * (1 - mixWeight) + highColour.red * colourScale* mixWeight;
 	double g = lowColour.green * colourScale * (1 - mixWeight) + highColour.green * colourScale * mixWeight;
 	double b = lowColour.blue * colourScale * (1 - mixWeight) + highColour.blue * colourScale *mixWeight;
+
+	if(local->slopesEnabled) {
+		float distance[3][3];
+		if(local->scalingMode == 1) {
+			getDistanceIntraFrame(distance, x, y, local, true);
+		}
+		else {
+			GetBlendedDistanceMatrix(distance, local, x, y);
+		}
+		
+		doSlopes(distance, local, r, g, b);
+	}
 
 	out->alpha = white32;
 	out->red = static_cast<float>(r);

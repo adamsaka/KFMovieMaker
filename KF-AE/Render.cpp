@@ -390,38 +390,7 @@ double doModifier(long modifier, double it) {
 }
 
 
-/*******************************************************************************************************
-Gets a 3x3 matrix of values surrouning a given location (x,y)
-Called by pixel functions.
-(x,y) is the AE requested pixel, this function will translate to .kfb coordinates.
-The value is calculated by blending .kfbs
-*******************************************************************************************************/
-void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
-	const double halfWidth = static_cast<double>(local->width) / 2;
-	const double halfHeight = static_cast<double>(local->height) / 2;
-	const double xCentre = (x * local->scaleFactorX) - halfWidth;
-	const double yCentre = (y * local->scaleFactorY) - halfHeight;
-	double xLocation = xCentre / local->activeZoomScale + halfWidth;
-	double yLocation = yCentre / local->activeZoomScale + halfHeight;
-	
-	
-	local->activeKFB->getDistanceMatrix(matrix, static_cast<float>(xLocation), static_cast<float>(yLocation), 1/static_cast<float>(local->activeZoomScale));
-	
-	if(local->nextFrameKFB && local->keyFramePercent > 0.01 && local->nextZoomScale > 0) {
-		xLocation = xCentre / local->nextZoomScale + halfWidth;
-		yLocation = yCentre / local->nextZoomScale + halfHeight;
-		bool nextInBounds = (xLocation >= 1 && yLocation >= 1 && xLocation <= local->width - 2 && yLocation <= local->height - 2);
 
-		if(nextInBounds) {
-			float next[3][3];
-			local->nextFrameKFB->getDistanceMatrix(next, static_cast<float>(xLocation), static_cast<float>(yLocation), 1/static_cast<float>(local->nextZoomScale));
-			const float mixWeight = static_cast<float>(local->keyFramePercent);
-			for(int i = 0; i < 3; i++) for(int j = 0; j < 3; j++) {
-				matrix[i][j] = (1 - mixWeight) * matrix[i][j] + next[i][j]* mixWeight;
-			}
-		}
-	}
-}
 
 
 /*******************************************************************************************************
@@ -535,6 +504,106 @@ void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour,
 	mixWeight = rem - std::floor(rem);
 }
 
+/*******************************************************************************************************
+Adds slopes colour calculations to r,g,b
+r,g,b are colour values from 0.0 to 1.0
+p[x][y] is a maxtrix of itaration values around point p[1][1] (may be a minimal cross)
+*******************************************************************************************************/
+void doSlopes(float p[][3], LocalSequenceData* local, double& r, double& g, double& b) {
+	float diffx = (p[0][1] - p[2][1])/2.0f ;
+	float diffy = (p[1][0] - p[1][2])/2.0f ;
+	double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
+
+	double p1 = fmax(1, p[1][1]);
+	diff = (p1 + diff) / p1;
+	
+	//Different to KF code, as I want it frame independant, might need improving
+	diff = pow(diff, local->slopeShadowDepth * std::log(p[1][1] / 5000 + 1) * (local->width)); 
+
+	if(diff>1) {
+		diff = (atan(diff) - pi / 4) / (pi / 4);
+		diff = diff*local->slopeStrength / 100;
+		r = (1 - diff)*r;
+		g = (1 - diff)*g;
+		b = (1 - diff)*b;
+	}
+	else {
+		diff = 1 / diff;
+		diff = (atan(diff) - pi / 4) / (pi / 4);
+		diff = diff*local->slopeStrength / 100;;
+		r = (1 - diff)*r + diff;
+		g = (1 - diff)*g + diff;
+		b = (1 - diff)*b + diff;
+	}
+}
+
+/*******************************************************************************************************
+Gets a 3x3 matrix of values surrouning a given location (x,y)
+Called by pixel functions.
+(x,y) is the AE requested pixel, this function will translate to .kfb coordinates.
+The value is calculated by blending .kfbs
+For use in frame-by-frame (not suitable for cached images). 
+No intra-frame complensation, so will create the pulsating look.
+*******************************************************************************************************/
+void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
+	const double halfWidth = static_cast<double>(local->width) / 2;
+	const double halfHeight = static_cast<double>(local->height) / 2;
+	const double xCentre = (x * local->scaleFactorX) - halfWidth;
+	const double yCentre = (y * local->scaleFactorY) - halfHeight;
+	double xLocation = xCentre / local->activeZoomScale + halfWidth;
+	double yLocation = yCentre / local->activeZoomScale + halfHeight;
+
+
+	local->activeKFB->getDistanceMatrix(matrix, static_cast<float>(xLocation), static_cast<float>(yLocation), 1 / static_cast<float>(local->activeZoomScale));
+
+	if(local->nextFrameKFB && local->keyFramePercent > 0.01 && local->nextZoomScale > 0) {
+		xLocation = xCentre / local->nextZoomScale + halfWidth;
+		yLocation = yCentre / local->nextZoomScale + halfHeight;
+		bool nextInBounds = (xLocation >= 1 && yLocation >= 1 && xLocation <= local->width - 2 && yLocation <= local->height - 2);
+
+		if(nextInBounds) {
+			float next[3][3];
+			local->nextFrameKFB->getDistanceMatrix(next, static_cast<float>(xLocation), static_cast<float>(yLocation), 1 / static_cast<float>(local->nextZoomScale));
+			const float mixWeight = static_cast<float>(local->keyFramePercent);
+			for(int i = 0; i < 3; i++) for(int j = 0; j < 3; j++) {
+				matrix[i][j] = (1 - mixWeight) * matrix[i][j] + next[i][j] * mixWeight;
+			}
+		}
+	}
+}
+
+/*******************************************************************************************************
+Build distance matrix for static cached image in a way that will work with cached image scaling.
+This is required because DE is faked using pixel values.
+It interpolate over smaller distances near the centre of the image
+*******************************************************************************************************/
+void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool minimal) {
+	float step = 0.5;
+
+	//Calculate pixel location.
+	double halfWidth = static_cast<double>(local->width) / 2.0f;
+	double halfHeight = static_cast<double>(local->height) / 2.0f;
+	double xCentre = (x * local->scaleFactorX) - halfWidth;
+	double yCentre = (y * local->scaleFactorY) - halfHeight;
+	double xLocation = xCentre / local->activeZoomScale + halfWidth;
+	double yLocation = yCentre / local->activeZoomScale + halfHeight;
+	float xf = static_cast<float>(xLocation);
+	float yf = static_cast<float>(yLocation);
+
+	float adjustX = xf / static_cast<float>(local->scaleFactorX);
+	float adjustY = yf / static_cast<float>(local->scaleFactorY);
+
+	float distanceToEdgeX = std::min(xf, local->width - xf);
+	float distanceToEdgeY = std::min(yf, local->height - yf);
+	float distanceToEdge = std::min(distanceToEdgeX, distanceToEdgeY);
+
+	float percentX = (distanceToEdgeX / static_cast<float>(local->width / 4));
+	float percentY = (distanceToEdgeY / static_cast<float>(local->height / 4));
+	float percent = std::min(percentX, percentY);
+	step = std::exp(-std::log(2.0f)*percent); //Assumes zoom size 2
+
+	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step, minimal);
+}
 
 /*******************************************************************************************************
 Render (non smart)
