@@ -1,10 +1,36 @@
+/********************************************************************************************
+Parameters.cpp
+
+Author:			(c) 2019 Adam Sakareassen
+
+Licence:		GNU Affero General Public License
+
+Contains all code to maipulate After Effects parameters.
+
+Includes many helper functions.  
+
+I've generally avoided the AE macros as they contrain unsafe string functions.
+
+I keep track of locations vs index in "paramTranslate" array.  This allows re-ordering of 
+parameters without breaking existing projects.
+
+When smart rendering parameters must be checked in and out.  The "read" functions do this as required.
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+********************************************************************************************/
 #include "KFMovieMaker.h"
 #include "Parameters.h"
 #include "SequenceData.h"
 #include "OS.h"
 
 #include <string>
-#include <experimental/filesystem>  //Experimental as of VC2017 c++17
 
 std::array<int, static_cast<int>(ParameterID::__last)> paramTranslate; ///To translate param ID to location
 int paramsAdded {1};  ///Counter used to track parameters as they are added.
@@ -17,21 +43,16 @@ static void AddGroupStart(ParameterID id, const char * name, PF_ParamFlags flags
 static void AddGroupEnd(ParameterID id);
 static void AddColourPicker(ParameterID id, const char * name, unsigned char red = 0, unsigned char green = 0, unsigned char blue = 0, PF_ParamFlags flags = 0);
 static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags=0);
-
 inline long useParam(ParameterID p);
-
-
 
 /*******************************************************************************************************
 Setup Parameters
+Respond to the After Effects PF_Cmd_PARAMS_SETUP event.
 *******************************************************************************************************/
 PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*params[], PF_LayerDef *output) {
 	PF_Err err {PF_Err_NONE};
-
-	PF_ParamDef	def;
-	AEFX_CLR_STRUCT(def);
-	paramTranslate.fill(0);
-	paramsAdded = 1;	//Effect world is parameter number 0.
+	paramTranslate.fill(0);		//Prepare the location/id translation array.
+	paramsAdded = 1;			//Effect world is parameter number 0, so start at 1.
 
 	
 	AddButton(ParameterID::fileSelectButton, "File Location", "Browse", PF_ParamFlag_SUPERVISE | PF_ParamFlag_CANNOT_TIME_VARY);
@@ -69,10 +90,6 @@ inline long useParam(ParameterID p) {
 	return val;
 }
 
-
-
-
-
 /*******************************************************************************************************
 File Select Button Clicked
 *******************************************************************************************************/
@@ -102,7 +119,8 @@ PF_Err FileSelectButtonClicked(PF_InData *in_data, PF_OutData *out_data, PF_Para
 
 /*******************************************************************************************************
 Parameters Changed
-For responding to button clicks
+For responding to button clicks.
+Called when AE issues a PF_Cmd_USER_CHANGED_PARAM event.
 *******************************************************************************************************/
 PF_Err ParameterChanged(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*params[], const PF_UserChangedParamExtra *paramExtra) {
 	//Perform actions for specific parameters.
@@ -115,7 +133,6 @@ PF_Err ParameterChanged(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*p
 		default:
 			break;
 	}
-	
 	return PF_Err_NONE;
 }
 
@@ -125,14 +142,12 @@ Note: Safer than the AE macro.
 *******************************************************************************************************/
 static void AddButton(ParameterID id, const char * name, const char * buttonText, PF_ParamFlags flags , PF_ParamUIFlags ui_flags) {
 	PF_ParamDef	def {};	//Must be zero initialised.
-	
 	def.param_type = PF_Param_BUTTON;
 	strncpy_s(def.name, name, sizeof(def.name));
 	def.uu.id = static_cast<long>(id);
 	def.flags = flags;
 	def.ui_flags = ui_flags;
 	def.u.button_d.u.namesptr = buttonText;
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -141,12 +156,11 @@ static void AddButton(ParameterID id, const char * name, const char * buttonText
 
 
 /*******************************************************************************************************
-Create a Button parameter  (only to be called during ParamaterSetup event)
+Create a slider parameter  (only to be called during ParamaterSetup event)
 Note: Safer than the AE macro.
 *******************************************************************************************************/
 static void AddSlider(ParameterID id, const char * name, float min, float max, float sliderMin, float sliderMax, float value, short decimals,  PF_ParamFlags flags) {
 	PF_ParamDef	def {};	//Must be zero initialised.
-	
 	def.param_type = PF_Param_FLOAT_SLIDER;
 	strncpy_s(def.name, name, sizeof(def.name));
 	def.uu.id = static_cast<long>(id);
@@ -158,7 +172,6 @@ static void AddSlider(ParameterID id, const char * name, float min, float max, f
 	def.u.fs_d.value = value;
 	def.u.fs_d.dephault = value;
 	def.u.fs_d.precision = decimals;
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -174,7 +187,6 @@ static void AddDropDown(ParameterID id, const char * name, const char * choices,
 	PF_ParamDef	def {};	//Must be zero initialised.
 	short choiceCount = 1;
 	for(int i = 0; choices[i] != 0; i++) if(choices[i] == '|') choiceCount++;
-
 	def.param_type = PF_Param_POPUP;
 	strncpy_s(def.name, name, sizeof(def.name));
 	def.flags = flags;
@@ -183,7 +195,6 @@ static void AddDropDown(ParameterID id, const char * name, const char * choices,
 	def.u.pd.value = value; //1 based index
 	def.u.pd.num_choices = choiceCount;
 	def.u.pd.u.namesptr = choices;
-	
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -203,7 +214,6 @@ static void AddCheckBox(ParameterID id, const char * name, const char * comment,
 	def.u.bd.u.nameptr = comment;
 	def.u.bd.dephault = value;
 	def.u.bd.value = value;
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -216,13 +226,10 @@ Note: Safer than the AE macro.
 *******************************************************************************************************/
 static void AddGroupStart(ParameterID id, const char * name, PF_ParamFlags flags ) {
 	PF_ParamDef	def {};	//Must be zero initialised.
-
 	def.param_type = PF_Param_GROUP_START;
 	strncpy_s(def.name, name, sizeof(def.name));
 	def.uu.id = static_cast<long>(id);
 	def.flags = flags;
-	
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -234,17 +241,15 @@ Create a Group End parameter  (only to be called during ParamaterSetup event)
 *******************************************************************************************************/
 static void AddGroupEnd(ParameterID id) {
 	PF_ParamDef	def {};	//Must be zero initialised.
-
 	def.param_type = PF_Param_GROUP_END;
 	def.uu.id = static_cast<long>(id);
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
 	return;
 }
 /*******************************************************************************************************
-Create aColour parameter  (only to be called during ParamaterSetup event)
+Create a "Colour picker" parameter  (only to be called during ParamaterSetup event)
 *******************************************************************************************************/
 static void AddColourPicker(ParameterID id, const char * name, unsigned char red, unsigned char green, unsigned char blue,  PF_ParamFlags flags) {
 	PF_ParamDef	def {};	//Must be zero initialised.
@@ -255,9 +260,8 @@ static void AddColourPicker(ParameterID id, const char * name, unsigned char red
 	def.u.cd.value.red = red;
 	def.u.cd.value.green = green;
 	def.u.cd.value.blue = blue;
-	def.u.cd.value.alpha = 255; //not selectable.
+	def.u.cd.value.alpha = 255; //alpha is not actually selectable.
 	def.u.cd.dephault = def.u.cd.value;
-
 	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
 	if(err) throw(err);
 	useParam(id);
@@ -266,8 +270,8 @@ static void AddColourPicker(ParameterID id, const char * name, unsigned char red
 
 
 /*******************************************************************************************************
-Adds a angle parameter
-value is in degrees
+Adds an "Angle" parameter (only to be called during ParamaterSetup event)
+Value is an integer in degrees, it will be converted to AE fixed-point
 *******************************************************************************************************/
 static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags) {
 	PF_ParamDef	def {};	//Must be zero initialised.
@@ -284,14 +288,15 @@ static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFla
 }
 
 /*******************************************************************************************************
-Reads the value an angle paramter (in degrees) as a double.
+Reads the value an angle paramter (in degrees).
+Internally AE uses fixed-point for this parameter, this function converts it to a double.
 Note: May be multple of 360
+Uses check-in/check-out, so this is ok to use during a smart-render call.
 *******************************************************************************************************/
 double readAngleParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
 	if(parameterLocation == 0) throw ("Invalid request in readAngle");
 	PF_ParamDef param {};
-	AEFX_CLR_STRUCT(param);
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
 	long valueLong = param.u.ad.value;  //this is a fixed point
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
@@ -307,8 +312,7 @@ Uses check-in/check-out, so this is ok to use during a smart-render call.
 double readFloatSliderParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
 	if(parameterLocation == 0) throw ("Invalid request in readFloatSliderParam");
-	PF_ParamDef param;
-	AEFX_CLR_STRUCT(param);
+	PF_ParamDef param {};
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
 	double value = param.u.fs_d.value;
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
@@ -322,8 +326,7 @@ Uses check-in/check-out, so this is ok to use during a smart-render call.
 long readListParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
 	if(parameterLocation == 0) throw ("Invalid request in readListParam");
-	PF_ParamDef param;
-	AEFX_CLR_STRUCT(param);
+	PF_ParamDef param {};
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
 	long value = param.u.pd.value;
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
@@ -337,8 +340,7 @@ Uses check-in/check-out, so this is ok to use during a smart-render call.
 bool readCheckBoxParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
 	if(parameterLocation == 0) throw ("Invalid request in readCheckBoxParam");
-	PF_ParamDef param;
-	AEFX_CLR_STRUCT(param);
+	PF_ParamDef param {};
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
 	auto value = param.u.pd.value;
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
@@ -346,13 +348,13 @@ bool readCheckBoxParam(PF_InData *in_data, ParameterID paramID) {
 }
 
 /*******************************************************************************************************
-
+Reads a colour picker parameter.
+Uses check-in/check-out, so this is ok to use during a smart-render call.
 *******************************************************************************************************/
 RGB readColourParam(PF_InData *in_data, ParameterID paramID) {
 	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
 	if(parameterLocation == 0) throw ("Invalid request in readColourParam");
-	PF_ParamDef param;
-	AEFX_CLR_STRUCT(param);
+	PF_ParamDef param {};
 	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
 	RGB value;
 	value.red = param.u.cd.value.red;

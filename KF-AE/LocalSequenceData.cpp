@@ -1,13 +1,22 @@
 /********************************************************************************************
 Local Sequence Data
 
-Author: Adam Sakareassen
+Author:			Adam Sakareassen
 
-Credits: "Key Frame Movie Maker"  from the "Kalles Fraktaler" project was consulted for the 
-         .kfb file format details.
+Description:	Contains data that is relevent for the current sequence (ie the specific instance of the plug-in)
+				Contains data that is not saved within the AE Project file.
+				This general class also holds rendering data and is passed to the rendering functions
 
-Contains data that is relevent for the current sequence (ie the specific instance of the plug-in)
-Contains data that is not saved within the AE Project file.
+Licence:		GNU Affero General Public License
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "LocalSequenceData.h"
 #include "KFMovieMaker.h"

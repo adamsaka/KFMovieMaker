@@ -1,6 +1,25 @@
 #pragma once
+/********************************************************************************************
+Parameters.h
+
+Author:			(c) 2019 Adam Sakareassen
+
+Licence:		GNU Affero General Public License
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+********************************************************************************************/
+
+//ParameterID contains the IDs assigned internally by After Effects when saving projects.
+//Note: The AE SDK usually gives back the location rather than the ID, so it needs translating.
 enum class ParameterID : long {
-	input = 0,
+	input = 0,	//Reserve ID zero for AE.
 	fileSelectButton,
 	keyFrameNumber,
 	colourDivision,
@@ -21,14 +40,12 @@ enum class ParameterID : long {
 	slopeShadowDepth,
 	slopeStrength,
 	slopeAngle,
-	__last,
+	__last,  //Must be last (used for array memory allocation)
 };
 
 
 PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*params[], PF_LayerDef *output);
 PF_Err ParameterChanged(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*params[], const PF_UserChangedParamExtra	*paramExtra);
-
-
 double readFloatSliderParam(PF_InData * in_data, ParameterID parameterNumber);
 long readListParam(PF_InData * in_data, ParameterID parameterNumber);
 bool readCheckBoxParam(PF_InData * in_data, ParameterID parameterNumber);

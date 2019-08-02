@@ -2,15 +2,26 @@
 /********************************************************************************************
 KFBData.h
 
-Author: Adam Sakareassen
+Author:			Adam Sakareassen
 
-Credits: KeyFrameMovieMaker from the Kalles Fraktaler project was consulted for the KFB
-		 file format.
+Credits:		KeyFrameMovieMaker from the Kalles Fraktaler project was consulted for the KFB
+				file format.
 
 Description:	Holds the contents of a .kfb file.  
 				.kfb file includes iteration data, smooth data, and colour data.
 				Has handels to hold (and destroy) a chached pre-rendered image of this data.
 				This class will clean-up chache handles and its own memory allocations.
+
+Licence:		GNU Affero General Public License
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "KFMovieMaker.h"
 #include <string>

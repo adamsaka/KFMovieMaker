@@ -2,16 +2,28 @@
 /********************************************************************************************
 Local Sequence Data
 
-Author: Adam Sakareassen
+Author: (c) 2019 Adam Sakareassen
+
+Licence:		GNU Affero General Public License
 
 Contains data that is relevent for the current sequence (ie the specific instance of the plug-in)
 Contains data that is not saved within the AE Project file.
 
 This class will only be created within a SequenceData object.  It will be created and destroyed as
 After Effect flattens and unflattens data. (happens on save, etc). The reason for this is that we
-don't want all this working data written back to the project file.  The .kfr and .kfb file data 
+don't want all this working data written back to the project file.  The .kfr and .kfb file data
 should be read fresh each time the project is opened.
 
+This class also hold much of the data required by the rendering functions.
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "KFBData.h"
 

@@ -1,9 +1,23 @@
 /********************************************************************************************
-Render
+Render.cpp
 
-Author: Adam Sakareassen
+Author:			(c) 2019 Adam Sakareassen
 
-Rendering Functions
+Licence:		GNU Affero General Public License
+
+Contains smart rendering and various common functions for rendering.
+Usually dispatches rendering to pixel iterator functions (defined elsewhere).
+Don't edit LocalSequenceData in pixel specific functions, it must remain read only to be 
+thread-safe once rendering begins.
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "Render.h"
 #include "SequenceData.h"
@@ -16,6 +30,7 @@ Rendering Functions
 
 #include <cmath>
 
+//Function prototypes for pixel iterators.
 typedef PF_Err(*PixelFunction8)(void *refcon, A_long x, A_long y, PF_Pixel8 *in, PF_Pixel8 *out);
 typedef PF_Err(*PixelFunction16)(void* refcon, A_long x, A_long y, PF_Pixel16 *in, PF_Pixel16 *out);
 typedef PF_Err(*PixelFunction32)(void* refcon, A_long x, A_long y, PF_Pixel32 *in, PF_Pixel32 *out);
@@ -24,8 +39,13 @@ static void setMaxOuputRectangle(PF_PreRenderExtra* preRender, long left, long r
 static void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long right, long top, long bottom);
 static PF_Err SetToBlack8(void *refcon, A_long xL, A_long yL, PF_Pixel8 *inP, PF_Pixel8 *outP);
 static PF_Err SetToBlack16(void *refcon, A_long xL, A_long yL, PF_Pixel16 *inP, PF_Pixel16 *outP);
-
-
+inline PixelFunction8 selectPixelRenderFunction8(long method);
+inline PixelFunction16 selectPixelRenderFunction16(long method);
+inline PixelFunction32 selectPixelRenderFunction32(long method);
+static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
+static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
+static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
+static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
 
 /*******************************************************************************************************
 Pre Render
@@ -37,7 +57,7 @@ PF_Err SmartPreRender(PF_InData *in_data, PF_OutData *out_data,  PF_PreRenderExt
 	auto sd = SequenceData::GetSequenceData(in_data);
 	if(!sd) throw ("Sequence Data invalid");
 
-	if (!sd->Validate() ) {
+	if (!sd->Validate()) {
 		setMaxOuputRectangle(preRender, 0, 0, 0, 0);
 		setOuputRectangle(preRender, 0, 0, 0, 0);
 		return PF_Err_NONE;
@@ -51,17 +71,78 @@ PF_Err SmartPreRender(PF_InData *in_data, PF_OutData *out_data,  PF_PreRenderExt
 	auto r = preRender->input->output_request.rect;
 	if (r.top > w || r.left > h || r.bottom < 0 || r.right < 0) {
 		setOuputRectangle(preRender, 0, 0, 0, 0);  //Outside area covered by our fractal
-		return PF_Err_NONE;
 	}
-	
-	setOuputRectangle(preRender, std::max(0, r.left), std::min(w, r.right), std::max(0, r.top), std::min(h, r.bottom));
-	
-	preRender->output->solid = true;
+	else {
+		setOuputRectangle(preRender, std::max(0, r.left), std::min(w, r.right), std::max(0, r.top), std::min(h, r.bottom));
+	}
+
+	preRender->output->solid = true;  //only until we start using alpha
 	return PF_Err_NONE;
 }
 
 /*******************************************************************************************************
-Sets the max output rectangle in smart pre render.
+Smart Render
+*******************************************************************************************************/
+PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra* smartRender) {
+	PF_Err err {PF_Err_NONE};
+
+	//Check that sequence data is ready to render
+	auto sd = SequenceData::GetSequenceData(in_data);
+	if(!sd) return PF_Err_INTERNAL_STRUCT_DAMAGED;
+	if(!sd->Validate()) return PF_Err_NONE;
+	auto local = sd->getLocalSequenceData();
+
+	//Read parameters.
+	double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
+	keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
+	local->colourDivision = readFloatSliderParam(in_data, ParameterID::colourDivision);
+	if(local->colourDivision == 0) local->colourDivision = 0.000001;
+	local->method = readListParam(in_data, ParameterID::colourMethod);
+	local->modifier = readListParam(in_data, ParameterID::modifier);
+	local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
+	local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
+	local->insideColour = readColourParam(in_data, ParameterID::insideColour);
+	local->colourOffset = readFloatSliderParam(in_data, ParameterID::colourOffset);
+	local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
+	local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
+	if(local->slopesEnabled) {
+		local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
+		local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
+		local->slopeAngle = readAngleParam(in_data, ParameterID::slopeAngle);
+		const double angleRadians = local->slopeAngle * pi / 180;
+		local->slopeAngleX = cos(angleRadians);
+		local->slopeAngleY = sin(angleRadians);
+	}
+
+	//Setup data for active frame, and next frame.
+	long activeFrame = static_cast<long>(std::floor(keyFrame));
+	local->keyFramePercent = keyFrame - activeFrame;
+	local->activeZoomScale = std::exp(std::log(2) * (keyFrame - activeFrame));
+	local->nextZoomScale = std::exp(std::log(2) * (keyFrame - 1 - activeFrame));
+	local->SetupActiveKFB(activeFrame, in_data);
+	local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
+	local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
+	local->bitDepth = smartRender->input->bitdepth;
+
+
+	//Checkout Output buffer
+	PF_EffectWorld* output {nullptr};
+	err = smartRender->cb->checkout_output(in_data->effect_ref, &output);
+	if(err != PF_Err_NONE) return err;
+
+	//Actually begin rendering
+	if(local->scalingMode == 1) {
+		DoCachedImages(in_data, smartRender, output, local);
+	}
+	else {
+		GenerateImage(in_data, smartRender, output, local);
+	}
+
+	return err;
+}
+
+/*******************************************************************************************************
+A helper to set the max output rectangle in smart pre render.
 *******************************************************************************************************/
 inline void setMaxOuputRectangle(PF_PreRenderExtra* preRender, long left, long right, long top, long bottom) {
 	preRender->output->max_result_rect.top = top;
@@ -69,54 +150,15 @@ inline void setMaxOuputRectangle(PF_PreRenderExtra* preRender, long left, long r
 	preRender->output->max_result_rect.left = left;
 	preRender->output->max_result_rect.right = right;
 }
+
 /*******************************************************************************************************
-Sets the output rectangle in smart pre render.
+A helper to set the output rectangle in smart pre render.
 *******************************************************************************************************/
 inline void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long right, long top, long bottom) {
 	preRender->output->result_rect.top = top;
 	preRender->output->result_rect.bottom = bottom;
 	preRender->output->result_rect.left = left;
 	preRender->output->result_rect.right = right;
-}
-
-
-PixelFunction8 selectPixelRenderFunction8(long method) {
-	switch(method) {
-		case 1:
-			return Render_KFRColouring::Render8;
-		case 2:
-			return Render_KFRDistance::Render8;
-		case 4:
-			return Render_DarkLightWave::Render8;
-		default:
-			throw(std::exception("Unknown rendering method"));
-	}
-}
-
-PixelFunction16 selectPixelRenderFunction16(long method) {
-	switch(method) {
-		case 1:
-			return Render_KFRColouring::Render16;
-		case 2:
-			return Render_KFRDistance::Render16;
-		case 4:
-			return Render_DarkLightWave::Render16;
-		default:
-			throw(std::exception("Unknown rendering method"));
-	}
-}
-
-PixelFunction32 selectPixelRenderFunction32(long method) {
-	switch(method) {
-		case 1:
-			return Render_KFRColouring::Render32;
-		case 2:
-			return Render_KFRDistance::Render32;
-		case 4:
-			return Render_DarkLightWave::Render32;
-		default:
-			throw(std::exception("Unknown rendering method"));
-	}
 }
 
 
@@ -157,6 +199,45 @@ static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender
 
 }
 
+/*******************************************************************************************************
+Render using the chached image method.
+*******************************************************************************************************/
+static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
+PF_Err err {PF_Err_NONE};
+	AEGP_SuiteHandler suites(in_data->pica_basicP);
+	if(local->isCacheInvalid()) {
+		if(local->activeKFB) local->activeKFB->DisposeOfCache();
+		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
+	}
+
+
+
+	if(!local->activeKFB->isImageCached) {
+		err = makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
+		if(err) return err;
+	}
+
+	if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
+		auto backup = local->activeKFB;
+		local->activeKFB = local->nextFrameKFB;
+		err = makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
+		local->activeKFB = backup;
+		if(err) return err;
+	}
+
+
+	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, output, &smartRender->input->output_request.rect, local->activeZoomScale, 1, 1, 1.0);
+	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, output, &smartRender->input->output_request.rect, local->nextZoomScale, 1, 1, local->keyFramePercent);
+	}
+
+
+	return err;
+}
+
+/*******************************************************************************************************
+Make a chached image of the .kfb
+*******************************************************************************************************/
 static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local) {
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
@@ -164,8 +245,8 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	int width = static_cast<int>(kfb->getWidth() / local->scaleFactorX);
 	int height = static_cast<int>(kfb->getHeight() / local->scaleFactorY);
 	
+	//Create a new "world" (aka, and image buffer).
 	switch(smartRender->input->bitdepth) {
-		
 		case 8:
 			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height,&kfb->cachedImageAEGP);
 			break;
@@ -181,10 +262,7 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	if(err) return err;
 	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(kfb->cachedImageAEGP, &kfb->cachedImage);
 	
-	kfb->isImageCached = true;
-	local->saveCachedParameters();
-
-	//Draw the image
+	//Adjust zoom scales, because we don't want a zoomed image, then call GenerateImage
 	auto backup1 = local->keyFramePercent;
 	auto backup2 = local->activeZoomScale;
 	auto backup3 = local->nextZoomScale;
@@ -195,11 +273,19 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	local->keyFramePercent = backup1;
 	local->activeZoomScale = backup2;
 	local->nextZoomScale = backup3;
-	if(err) local->activeKFB->DisposeOfCache();
-	
+	if(!err) {
+		kfb->isImageCached = true;
+		local->saveCachedParameters();
+	}
+	else {
+		local->activeKFB->DisposeOfCache();
+	}
 	return err;
 }
 
+/*******************************************************************************************************
+Scales the input image about its centre, and writes it to output.
+*******************************************************************************************************/
 static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity) {
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
@@ -210,7 +296,7 @@ static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_Ef
 	float centreX = static_cast<float>(input->width)/2;
 	float centreY = static_cast<float>(input->height) / 2;
 
-	//Note: AE uses matrix with row & col swapped (ie, the inner brackets is a coloumn).
+	//Note: For specifying an AE matrix, the inner brackets is a column.
 	const PF_FloatMatrix activeTrans = {{{s/sX, 0, 0}, {0, s/sY, 0}, {-(s/sX)*(centreX) + (centreX/sX), -(s/sY)*centreY + (centreY/sY), 1}}};
 
 	PF_CompositeMode comp;
@@ -229,107 +315,64 @@ static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_Ef
 }
 
 
-static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
-	
-	
-	PF_Err err {PF_Err_NONE};
-	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	if (local->isCacheInvalid()){
-		if (local->activeKFB) local->activeKFB->DisposeOfCache();
-		if (local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
-	}
 
-	
-	
-	if (!local->activeKFB->isImageCached){
-		err = makeKFBCachedImage(local->activeKFB, in_data,  smartRender,local);
-		if(err) return err;
-	}
-
-	if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
-		auto backup = local->activeKFB;
-		local->activeKFB = local->nextFrameKFB;
-		err = makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
-		local->activeKFB = backup;
-		if(err) return err;
-	}
-	
-	
-	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, output, &smartRender->input->output_request.rect , local->activeZoomScale, 1,1, 1.0);
-	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, output, &smartRender->input->output_request.rect, local->nextZoomScale, 1, 1, local->keyFramePercent);
-	}
-
-
-	return err;
-}
 
 
 /*******************************************************************************************************
-Smart Render
+Selects a pixel iterator based on method.
+Note: method is the index of the drop-down box paramater.
 *******************************************************************************************************/
-PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra* smartRender) {
-	PF_Err err {PF_Err_NONE};
-	
-
-	//Check that sequence data is ready to render
-	auto sd = SequenceData::GetSequenceData(in_data);
-	if(!sd) return PF_Err_INTERNAL_STRUCT_DAMAGED;
-	if(!sd->Validate()) return PF_Err_NONE;
-	auto local = sd->getLocalSequenceData();
-
-	//Read parameters.
-	double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
-	keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
-	local->colourDivision = readFloatSliderParam(in_data, ParameterID::colourDivision);
-	if(local->colourDivision == 0) local->colourDivision = 0.000001;
-	local->method = readListParam(in_data, ParameterID::colourMethod);
-	local->modifier = readListParam(in_data, ParameterID::modifier);
-	local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
-	local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
-	local->insideColour = readColourParam(in_data, ParameterID::insideColour);
-	local->colourOffset = readFloatSliderParam(in_data, ParameterID::colourOffset);
-	local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
-	local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
-	if(local->slopesEnabled) {
-		local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
-		local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
-		local->slopeAngle = readAngleParam(in_data,ParameterID::slopeAngle);
-		double angleRadians = local->slopeAngle * pi / 180;
-		local->slopeAngleX = cos(angleRadians);
-		local->slopeAngleY = sin(angleRadians);
+inline PixelFunction8 selectPixelRenderFunction8(long method) {
+	switch(method) {
+		case 1:
+			return Render_KFRColouring::Render8;
+		case 2:
+			return Render_KFRDistance::Render8;
+		case 4:
+			return Render_DarkLightWave::Render8;
+		default:
+			throw(std::exception("Unknown rendering method"));
 	}
-
-	//Setup data for active frame, and next frame.
-	long activeFrame = static_cast<long>(std::floor(keyFrame));
-	local->keyFramePercent = keyFrame - activeFrame;
-	local->activeZoomScale = std::exp(std::log(2) * (keyFrame-activeFrame));
-	local->nextZoomScale = std::exp(std::log(2) * (keyFrame - 1 - activeFrame));
-	local->SetupActiveKFB(activeFrame, in_data);
-	local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
-	local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
-	local->bitDepth = smartRender->input->bitdepth;
-
-
-	//Checkout Output buffer
-	PF_EffectWorld* output {nullptr};
-	err = smartRender->cb->checkout_output(in_data->effect_ref, &output);
-	if(err != PF_Err_NONE) return err;
-	
-	if(local->scalingMode == 1) {
-		DoCachedImages(in_data, smartRender, output, local);
-	}
-	else {
-		GenerateImage(in_data, smartRender, output, local);
-	}
-
-	return err;
-
-	
 }
+
+/*******************************************************************************************************
+Selects a pixel iterator based on method.
+Note: method is the index of the drop-down box paramater.
+*******************************************************************************************************/
+inline PixelFunction16 selectPixelRenderFunction16(long method) {
+	switch(method) {
+		case 1:
+			return Render_KFRColouring::Render16;
+		case 2:
+			return Render_KFRDistance::Render16;
+		case 4:
+			return Render_DarkLightWave::Render16;
+		default:
+			throw(std::exception("Unknown rendering method"));
+	}
+}
+
+/*******************************************************************************************************
+Selects a pixel iterator based on method.
+Note: method is the index of the drop-down box paramater.
+*******************************************************************************************************/
+inline PixelFunction32 selectPixelRenderFunction32(long method) {
+	switch(method) {
+		case 1:
+			return Render_KFRColouring::Render32;
+		case 2:
+			return Render_KFRDistance::Render32;
+		case 4:
+			return Render_DarkLightWave::Render32;
+		default:
+			throw(std::exception("Unknown rendering method"));
+	}
+}
+
 
 /*******************************************************************************************************
 Adjust the iteration count based on the the selected modifier
+Called by pixel functions.
 *******************************************************************************************************/
 double doModifier(long modifier, double it) {
 	switch(modifier) {
@@ -347,8 +390,12 @@ double doModifier(long modifier, double it) {
 }
 
 
-
-
+/*******************************************************************************************************
+Gets a 3x3 matrix of values surrouning a given location (x,y)
+Called by pixel functions.
+(x,y) is the AE requested pixel, this function will translate to .kfb coordinates.
+The value is calculated by blending .kfbs
+*******************************************************************************************************/
 void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
 	const double halfWidth = static_cast<double>(local->width) / 2;
 	const double halfHeight = static_cast<double>(local->height) / 2;
@@ -380,6 +427,7 @@ void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local,
 /*******************************************************************************************************
 Calculates the interation count for (x,y) by blending frames.
 Note: Must be thread-safe, so "LocalSequenceData" should be read-only.
+Called by pixel functions.
 *******************************************************************************************************/
 double GetBlendedPixelValue(const LocalSequenceData* local, A_long x, A_long y) {
 	//Calculate pixel location, and get iteration count.
@@ -410,48 +458,7 @@ double GetBlendedPixelValue(const LocalSequenceData* local, A_long x, A_long y) 
 }
 
 
-/*******************************************************************************************************
-Render (non smart)
-We won't support older versions of AE.  Just set pixels to black.
-*******************************************************************************************************/
-PF_Err NonSmartRender(PF_InData *in_data, PF_OutData *out_data, PF_ParamDef *params[], PF_LayerDef	*output) {
-	PF_Err err = PF_Err_NONE;
-	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	auto lines = output->extent_hint.bottom - output->extent_hint.top;
-	
-	if (output->world_flags & PF_WorldFlag_DEEP) {
-		err = suites.Iterate8Suite1()->iterate(in_data, 0, lines, nullptr, nullptr, nullptr, SetToBlack8, output);
-	}
-	else {
-		err = suites.Iterate16Suite1()->iterate(in_data, 0, lines, nullptr, nullptr, nullptr, SetToBlack16, output);
-	}
-	
-	return err;
-}
 
-/*******************************************************************************************************
-Sets a pixel to black (8 bit pixel).
-Called by a pixel iterator.
-*******************************************************************************************************/
-static PF_Err SetToBlack8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out) {
-	out->red = 0;
-	out->blue = 0;
-	out->green = 0;
-	out->alpha = 0xff;
-	return PF_Err_NONE;
-}
-
-/*******************************************************************************************************
-Sets a pixel to black (16 bit pixel)
-Called by a pixel iterator.
-*******************************************************************************************************/
-static PF_Err SetToBlack16(void* refcon, A_long x, A_long y, PF_Pixel16* in, PF_Pixel16* out){
-	out->red = 0;
-	out->blue = 0;
-	out->green = 0;
-	out->alpha = 0xffff;
-	return PF_Err_NONE;
-}
 
 /*******************************************************************************************************
 Round and clamp to an 8 bit value
@@ -475,8 +482,10 @@ unsigned short roundTo16Bit(double f) {
 	return i;
 }
 
-
-PF_Err SetInsideColour8(LocalSequenceData* local, PF_Pixel8 * out) {
+/*******************************************************************************************************
+Set the colour of the pixel to the "inside colour" selected by the user.
+*******************************************************************************************************/
+PF_Err SetInsideColour8(const LocalSequenceData* local, PF_Pixel8 * out) {
 	out->alpha = white8;
 	out->red = local->insideColour.red;
 	out->green = local->insideColour.green;
@@ -484,7 +493,10 @@ PF_Err SetInsideColour8(LocalSequenceData* local, PF_Pixel8 * out) {
 	return PF_Err_NONE;
 }
 
-PF_Err SetInsideColour16(LocalSequenceData* local, PF_Pixel16 * out) {
+/*******************************************************************************************************
+Set the colour of the pixel to the "inside colour" selected by the user.
+*******************************************************************************************************/
+PF_Err SetInsideColour16(const LocalSequenceData* local, PF_Pixel16 * out) {
 	constexpr double colourScale = static_cast<double>(white16) / static_cast<double>(white8);
 	out->alpha = white16;
 	out->red = roundTo16Bit(local->insideColour.red * colourScale);
@@ -493,7 +505,10 @@ PF_Err SetInsideColour16(LocalSequenceData* local, PF_Pixel16 * out) {
 	return PF_Err_NONE;
 }
 
-PF_Err SetInsideColour32(LocalSequenceData* local, PF_Pixel32 * out) {
+/*******************************************************************************************************
+Set the colour of the pixel to the "inside colour" selected by the user.
+*******************************************************************************************************/
+PF_Err SetInsideColour32(const LocalSequenceData* local, PF_Pixel32 * out) {
 	constexpr double colourScale = static_cast<double>(white32) / static_cast<double>(white8);
 	out->alpha = white32;
 	out->red = static_cast<float>(local->insideColour.red * colourScale);
@@ -505,6 +520,7 @@ PF_Err SetInsideColour32(LocalSequenceData* local, PF_Pixel32 * out) {
 /*******************************************************************************************************
 Given an iteration count, gets the colour above and below, and calculates a mixing weight.
 (The mixing can then later be done at the desired precision.)
+Output parameters: highColour, lowColour, mixWeight 
 *******************************************************************************************************/
 void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour, RGB & lowColour, double & mixWeight) {
 	auto nColours = local->numKFRColours;
@@ -517,4 +533,48 @@ void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour,
 	lowColour = local->kfrColours[lowColourIndex];
 	highColour = local->kfrColours[highColourIndex];
 	mixWeight = rem - std::floor(rem);
+}
+
+
+/*******************************************************************************************************
+Render (non smart)
+We won't support older versions of AE.  Just set pixels to black.
+*******************************************************************************************************/
+PF_Err NonSmartRender(PF_InData *in_data, PF_OutData *out_data, PF_ParamDef *params[], PF_LayerDef	*output) {
+	PF_Err err = PF_Err_NONE;
+	AEGP_SuiteHandler suites(in_data->pica_basicP);
+	auto lines = output->extent_hint.bottom - output->extent_hint.top;
+
+	if(output->world_flags & PF_WorldFlag_DEEP) {
+		err = suites.Iterate8Suite1()->iterate(in_data, 0, lines, nullptr, nullptr, nullptr, SetToBlack8, output);
+	}
+	else {
+		err = suites.Iterate16Suite1()->iterate(in_data, 0, lines, nullptr, nullptr, nullptr, SetToBlack16, output);
+	}
+
+	return err;
+}
+
+/*******************************************************************************************************
+Sets a pixel to black (8 bit pixel).
+Called by a pixel iterator.
+*******************************************************************************************************/
+static PF_Err SetToBlack8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out) {
+	out->red = 0;
+	out->blue = 0;
+	out->green = 0;
+	out->alpha = white8;
+	return PF_Err_NONE;
+}
+
+/*******************************************************************************************************
+Sets a pixel to black (16 bit pixel)
+Called by a pixel iterator.
+*******************************************************************************************************/
+static PF_Err SetToBlack16(void* refcon, A_long x, A_long y, PF_Pixel16* in, PF_Pixel16* out) {
+	out->red = 0;
+	out->blue = 0;
+	out->green = 0;
+	out->alpha = white16;
+	return PF_Err_NONE;
 }

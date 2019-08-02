@@ -1,4 +1,22 @@
 #pragma once
+/********************************************************************************************
+KF Movie Maker
+
+Author:		Adam Sakareassen
+
+Credits:	The Adobe After Effects SDK was consulted while creating this file.
+
+Licence:	GNU Affero General Public License
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+********************************************************************************************/
 
 #ifndef KFMOVIEMAKER_H
 #define KFMOVIEMAKER_H

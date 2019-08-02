@@ -1,11 +1,22 @@
 /********************************************************************************************
 KF Movie Maker
 
-Author: Adam Sakareassen
+Author:		Adam Sakareassen
 
-Credits: skeleton.cpp from the Adobe After Effects SDK was used as a reference for this file
+Credits:	skeleton.cpp from the Adobe After Effects SDK was used as a reference for this file
 
 Description: Contains the entry points and basic utilities for controlling the plug-in
+
+Licence:	GNU Affero General Public License
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "KFMovieMaker.h"
 #include "Parameters.h"

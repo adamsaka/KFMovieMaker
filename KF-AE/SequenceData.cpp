@@ -3,19 +3,27 @@ Sequence Data
 
 Author: Adam Sakareassen
 
+Licence:		GNU Affero General Public License
+
 Manages the sequence data (ie. per instance data)
 
 The SequenceData struct contains the sequence data that will be sent to the plug-in with each call.
 This data will be saved within the After Effects Project
+
+********************************************************************************************
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU Affero General Public License for more details.
+
+You should have received a copy of the GNU Affero General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
 #include "SequenceData.h"
 #include "KFMovieMaker.h"
 #include "OS.h"
 
 #include <cassert>
-
-
-
 
 /*******************************************************************************************************
 After Effects Event Management
@@ -72,8 +80,6 @@ PF_Err SequenceData::SequenceFlatten(PF_InData *in_data, PF_OutData *out_data) {
 	return PF_Err_NONE;
 }
 
-
-
 /*******************************************************************************************************
 After Effects Event Management
 AE tells us to setup the sequence again.  Usually after file open, flatten or on duplication.
@@ -97,23 +103,14 @@ PF_Err SequenceData::SequenceResetup(PF_InData *in_data, PF_OutData *out_data) {
 	return PF_Err_NONE;
 }
 
-
-
 /*******************************************************************************************************
 After Effects Event Management
 AE tells us to destroy the sequence data
 *******************************************************************************************************/
 PF_Err SequenceData::SequenceSetdown(PF_InData *in_data, PF_OutData *out_data) {
 	DebugMessage("Sequence Shutdown\n");
-
 	return PF_Err_NONE;
 }
-
-
-
-
-
-
 
 /*****************************************************************************
 (Static) Get the sequence data from the in_data structure
@@ -124,8 +121,6 @@ SequenceData * SequenceData::GetSequenceData(PF_InData	*in_data) {
 	if (sd->confirm[0] != 'M' || sd->confirm[1] != 'T') return nullptr;  //Sanity Check
 	return sd;
 }
-
-
 
 /*****************************************************************************
 Checks if all the data is ok to render.
@@ -206,4 +201,3 @@ int SequenceData::getHeight()
 	if (!this->local || !this->local->readyToRender) return 0;
 	return this->local->height;
 }
-
