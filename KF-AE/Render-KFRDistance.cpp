@@ -187,7 +187,10 @@ PF_Err Render_KFRDistance::Render32(void * refcon, A_long x, A_long y, PF_Pixel3
 	b /= 255.0;
 
 	if(local->slopesEnabled) doSlopes(distance, local, r, g, b);
-		
+	
+	if(r < 0) r = 0;
+	if(g < 0) g = 0;
+	if(b < 0) b = 0;
 	out->red = static_cast<float>(r);
 	out->green = static_cast<float>(g);
 	out->blue = static_cast<float>(b);

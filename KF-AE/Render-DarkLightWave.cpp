@@ -99,6 +99,8 @@ PF_Err Render_DarkLightWave::Render32(void * refcon, A_long x, A_long y, PF_Pixe
 	if(colour == -1) SetInsideColour32(local, out);
 	
 	auto val = static_cast<float>(colour);
+	if(val < 0.0) val = 0.0; //Negative values causing rendering issues
+
 	out->red = val;
 	out->blue = val;
 	out->green = val;

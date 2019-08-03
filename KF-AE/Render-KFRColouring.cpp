@@ -165,7 +165,11 @@ PF_Err Render_KFRColouring::Render32(void * refcon, A_long x, A_long y, PF_Pixel
 		}
 		
 		doSlopes(distance, local, r, g, b);
+		
 	}
+	if(r < 0) r = 0;
+	if(g < 0) g = 0;
+	if(b < 0) b = 0;
 
 	out->alpha = white32;
 	out->red = static_cast<float>(r);

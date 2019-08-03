@@ -162,6 +162,7 @@ inline void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long righ
 }
 
 
+
 /*******************************************************************************************************
 Actually generate the image in the output buffer.
 *******************************************************************************************************/
@@ -222,16 +223,54 @@ PF_Err err {PF_Err_NONE};
 		local->activeKFB = local->nextFrameKFB;
 		err = makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
 		local->activeKFB = backup;
-		if(err) return err;
+		
+		if(err) {
+			local->activeKFB->DisposeOfCache(); //also dispose of active cached image
+			return err;
+		}
 	}
 
+	//Intermediate Render Stage
+	double nextOpacity = local->keyFramePercent;
+	PF_EffectWorld tempImage {};				
+	AEGP_WorldH tempImageAEGP {};				
+	constexpr double tempScale = 2.0;
+	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX) ;
+	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
 
+	//Create a new "world" (aka, and image buffer).
+	switch(smartRender->input->bitdepth) {
+		case 8:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &tempImageAEGP);
+			break;
+		case 16:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &tempImageAEGP);
+			break;
+		case 32:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &tempImageAEGP);
+			break;
+		default:
+			break;
+	}
+	if(err) return err;
+	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(tempImageAEGP, &tempImage);
+	if(err) return err;
+	
+	//PF_LRect rectIn {0, 0, local->activeKFB->cachedImage.width, local->activeKFB->cachedImage.height};
+	PF_LRect rectOut {0, 0, width, height};
+	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &tempImage, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
+	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &tempImage, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
+	}
+	ScaleAroundCentre(in_data,&tempImage, output, &smartRender->input->output_request.rect, 1, 1/tempScale, 1/tempScale, 1.0);
+	
+	/*
 	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, output, &smartRender->input->output_request.rect, local->activeZoomScale, 1, 1, 1.0);
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, output, &smartRender->input->output_request.rect, local->nextZoomScale, 1, 1, local->keyFramePercent);
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, output, &smartRender->input->output_request.rect, local->nextZoomScale, 1, 1, nextOpacity);
 	}
-
-
+	*/
+	suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
 	return err;
 }
 
@@ -283,6 +322,9 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	return err;
 }
 
+
+
+
 /*******************************************************************************************************
 Scales the input image about its centre, and writes it to output.
 *******************************************************************************************************/
@@ -301,16 +343,14 @@ static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_Ef
 
 	PF_CompositeMode comp;
 	AEFX_CLR_STRUCT(comp);
-	comp.opacity = 255;
-	comp.opacitySu = white16;
-	comp.xfer = PF_Xfer_IN_FRONT; //PF_Xfer_COPY;
+	comp.xfer =  PF_Xfer_IN_FRONT; 
+	comp.opacity = roundTo8Bit(opacity * white8);
+	comp.opacitySu = roundTo16Bit(std::round(opacity * white16));
 	
-	if(opacity < 1.0) {
-		comp.opacity = static_cast<unsigned char>(opacity * white8);
-		comp.opacitySu = static_cast<unsigned short>(opacity * white16);
-	}
+	
 
-	err = suites.WorldTransformSuite1()->transform_world(in_data->effect_ref, in_data->quality, 0, in_data->field, input, &comp, nullptr, &activeTrans, 1, true, rect, output);
+	err = suites.WorldTransformSuite1()->transform_world(in_data->effect_ref, PF_Quality_HI, 0, in_data->field, input, &comp, nullptr, &activeTrans, 1, true, rect, output);
+	
 	return err;
 }
 
