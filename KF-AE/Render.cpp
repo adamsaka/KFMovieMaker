@@ -27,6 +27,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Render-DarkLightWave.h"
 #include "Render-KFRColouring.h"
 #include "Render-KFRDistance.h"
+#include "Render-LogSteps.h"
 
 #include <cmath>
 
@@ -202,6 +203,12 @@ static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender
 
 /*******************************************************************************************************
 Render using the chached image method.
+
+Note: I now render to an temporary buffer first which is twice the requested resolution.
+The cached images are blended on this buffer, then it is downsampled.
+AE was producing very ugly results scaling images to between 95% and 99% creating, creating very messy
+artifacts.  Oversampling has dramatically improved the result.
+In theory this probably limits the output resolution to 16k x 16k, which should be fine for now.
 *******************************************************************************************************/
 static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
 PF_Err err {PF_Err_NONE};
@@ -210,8 +217,6 @@ PF_Err err {PF_Err_NONE};
 		if(local->activeKFB) local->activeKFB->DisposeOfCache();
 		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
 	}
-
-
 
 	if(!local->activeKFB->isImageCached) {
 		err = makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
@@ -256,7 +261,7 @@ PF_Err err {PF_Err_NONE};
 	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(tempImageAEGP, &tempImage);
 	if(err) return err;
 	
-	//PF_LRect rectIn {0, 0, local->activeKFB->cachedImage.width, local->activeKFB->cachedImage.height};
+	
 	PF_LRect rectOut {0, 0, width, height};
 	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &tempImage, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
@@ -264,12 +269,6 @@ PF_Err err {PF_Err_NONE};
 	}
 	ScaleAroundCentre(in_data,&tempImage, output, &smartRender->input->output_request.rect, 1, 1/tempScale, 1/tempScale, 1.0);
 	
-	/*
-	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, output, &smartRender->input->output_request.rect, local->activeZoomScale, 1, 1, 1.0);
-	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, output, &smartRender->input->output_request.rect, local->nextZoomScale, 1, 1, nextOpacity);
-	}
-	*/
 	suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
 	return err;
 }
@@ -370,6 +369,8 @@ inline PixelFunction8 selectPixelRenderFunction8(long method) {
 			return Render_KFRDistance::Render8;
 		case 4:
 			return Render_DarkLightWave::Render8;
+		case 5:
+			return Render_LogSteps::Render8;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -387,6 +388,8 @@ inline PixelFunction16 selectPixelRenderFunction16(long method) {
 			return Render_KFRDistance::Render16;
 		case 4:
 			return Render_DarkLightWave::Render16;
+		case 5:
+			return Render_LogSteps::Render16;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -404,6 +407,8 @@ inline PixelFunction32 selectPixelRenderFunction32(long method) {
 			return Render_KFRDistance::Render32;
 		case 4:
 			return Render_DarkLightWave::Render32;
+		case 5:
+			return Render_LogSteps::Render32;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
