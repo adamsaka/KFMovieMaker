@@ -360,7 +360,9 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ClInclude Include="..\Parameters.h" />
     <ClInclude Include="..\Render-DarkLightWave.h" />
     <ClInclude Include="..\Render-KFRDistance.h" />
+    <ClInclude Include="..\Render-LogStepPalette.h" />
     <ClInclude Include="..\Render-LogSteps.h" />
+    <ClInclude Include="..\Render-WaveOnPalette.h" />
     <ClInclude Include="..\Render.h" />
     <ClInclude Include="..\SequenceData.h" />
   </ItemGroup>
@@ -374,7 +376,9 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ClCompile Include="..\Render-DarkLightWave.cpp" />
     <ClCompile Include="..\Render-KFRColouring.cpp" />
     <ClCompile Include="..\Render-KFRDistance.cpp" />
+    <ClCompile Include="..\Render-LogStepPalette.cpp" />
     <ClCompile Include="..\Render-LogSteps.cpp" />
+    <ClCompile Include="..\Render-WaveOnPalette.cpp" />
     <ClCompile Include="..\Render.cpp" />
     <ClCompile Include="..\SequenceData.cpp" />
     <ClCompile Include="OS_Windows.cpp" />

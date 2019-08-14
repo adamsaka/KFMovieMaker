@@ -28,6 +28,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Render-KFRColouring.h"
 #include "Render-KFRDistance.h"
 #include "Render-LogSteps.h"
+#include "Render-WaveOnPalette.h"
+#include "Render-LogStepPalette.h"
 
 #include <cmath>
 
@@ -370,7 +372,11 @@ inline PixelFunction8 selectPixelRenderFunction8(long method) {
 		case 4:
 			return Render_DarkLightWave::Render8;
 		case 5:
+			return Render_WaveOnPalette::Render8;
+		case 6:
 			return Render_LogSteps::Render8;
+		case 7:
+			return Render_LogStepPalette::Render8;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -389,7 +395,11 @@ inline PixelFunction16 selectPixelRenderFunction16(long method) {
 		case 4:
 			return Render_DarkLightWave::Render16;
 		case 5:
+			return Render_WaveOnPalette::Render16;
+		case 6:
 			return Render_LogSteps::Render16;
+		case 7:
+			return Render_LogStepPalette::Render16;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -408,7 +418,11 @@ inline PixelFunction32 selectPixelRenderFunction32(long method) {
 		case 4:
 			return Render_DarkLightWave::Render32;
 		case 5:
+			return Render_WaveOnPalette::Render32;
+		case 6:
 			return Render_LogSteps::Render32;
+		case 7:
+			return Render_LogStepPalette::Render32;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -536,10 +550,10 @@ Given an iteration count, gets the colour above and below, and calculates a mixi
 (The mixing can then later be done at the desired precision.)
 Output parameters: highColour, lowColour, mixWeight 
 *******************************************************************************************************/
-void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour, RGB & lowColour, double & mixWeight) {
+void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour, RGB & lowColour, double & mixWeight, bool scaleLikeKF) {
 	auto nColours = local->numKFRColours;
 	if(nColours == 0) nColours = 1;
-	iCount *= static_cast<double>(nColours) / static_cast<double>(colourRange);  //Scale pallette like KF
+	if (scaleLikeKF) iCount *= static_cast<double>(nColours) / static_cast<double>(colourRange);  //Scale pallette like KF
 
 	double rem = std::fmod(iCount, static_cast<double>(nColours));
 	unsigned long lowColourIndex = static_cast<unsigned long>(std::floor(rem));
@@ -550,6 +564,8 @@ void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour,
 	highColour = local->kfrColours[highColourIndex];
 	mixWeight = rem - std::floor(rem);
 }
+
+
 
 /*******************************************************************************************************
 Adds slopes colour calculations to r,g,b

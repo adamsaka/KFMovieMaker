@@ -14,27 +14,42 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
-#include "Render-LogSteps.h"
+#include "Render-LogStepPalette.h"
 #include "LocalSequenceData.h"
 #include "Render.h"
-#include <cmath>
 
-constexpr double logScale = 10;  
+constexpr double logScale = 10;
 
 /*******************************************************************************************************
 Rendering Code common to all bit depths
 *******************************************************************************************************/
-inline static double RenderCommonLogSteps(const LocalSequenceData * local, A_long x, A_long y) {
+inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
 	double iCount = GetBlendedPixelValue(local, x, y);
-	if(iCount >= local->activeKFB->maxIterations)  return -1;  //Inside pixel
+	if(iCount >= local->activeKFB->maxIterations)  return RGBdouble(-1, -1, -1);  //Inside pixel
 
 	iCount = doModifier(local->modifier, iCount);
 	iCount /= local->colourDivision;
 	iCount += local->colourOffset;
 
-	iCount = 1- std::fmod(iCount,1) ;
-	iCount = std::log((iCount * logScale)+1);
-	iCount = (iCount)  / std::log(logScale+1); //scaled from 0.0 to 1.0;
+	//Get Colours
+	RGB highColour, lowColour;
+	double mixWeight {0.0};
+	GetColours(local, std::floor(iCount), highColour, lowColour, mixWeight, false);
+
+	//Mix Colours
+	RGBdouble result;
+	result.red = (lowColour.red * (1 - mixWeight) + highColour.red* mixWeight) / white8;
+	result.green = (lowColour.green * (1 - mixWeight) + highColour.green* mixWeight) / white8;
+	result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
+
+	iCount = 1-std::fmod(iCount, 1);
+	iCount = std::log((iCount * logScale) + 1);
+	iCount = (iCount) / std::log(logScale + 1); //scaled from 0.0 to 1.0;
+
+	result.red *= iCount;
+	result.green *= iCount;
+	result.blue *= iCount;
+
 
 	if(local->slopesEnabled) {
 		float distance[3][3];
@@ -44,26 +59,26 @@ inline static double RenderCommonLogSteps(const LocalSequenceData * local, A_lon
 		else {
 			GetBlendedDistanceMatrix(distance, local, x, y);
 		}
-		double tempA, tempB;
-		doSlopes(distance, local, iCount, tempA, tempB);
+
+		doSlopes(distance, local, result.red, result.green, result.blue);
 	}
-	return iCount;
+	return result;
 }
 
 
 /*******************************************************************************************************
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
-PF_Err Render_LogSteps::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
+PF_Err Render_LogStepPalette::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
 	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	double colour = RenderCommonLogSteps(local, x, y);
-	if(colour == -1) SetInsideColour8(local, out);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour8(local, out);
 
-	auto val = roundTo8Bit(colour * white8);
-	out->red = val;
-	out->blue = val;
-	out->green = val;
+
+	out->red = roundTo8Bit(colour.red * white8);
+	out->green = roundTo8Bit(colour.green * white8);
+	out->blue = roundTo8Bit(colour.blue * white8);
 	out->alpha = white8;
 
 	return PF_Err_NONE;
@@ -73,17 +88,15 @@ PF_Err Render_LogSteps::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * i
 /*******************************************************************************************************
 Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
-PF_Err Render_LogSteps::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
+PF_Err Render_LogStepPalette::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
 	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	double colour = RenderCommonLogSteps(local, x, y);
-	if(colour == -1) SetInsideColour16(local, out);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour16(local, out);
 
-	auto val = roundTo16Bit(colour * white16);
-
-	out->red = val;
-	out->blue = val;
-	out->green = val;
+	out->red = roundTo16Bit(colour.red * white16);
+	out->green = roundTo16Bit(colour.green * white16);
+	out->blue = roundTo16Bit(colour.blue * white16);
 	out->alpha = white16;
 	return PF_Err_NONE;
 
@@ -92,18 +105,20 @@ PF_Err Render_LogSteps::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 *
 /*******************************************************************************************************
 Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
-PF_Err Render_LogSteps::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
+PF_Err Render_LogStepPalette::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
 	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	double colour = RenderCommonLogSteps(local, x, y);
-	if(colour == -1) SetInsideColour32(local, out);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour32(local, out);
 
-	auto val = static_cast<float>(colour);
-	if(val < 0.0) val = 0.0; //Negative values causing rendering issues
 
-	out->red = val;
-	out->blue = val;
-	out->green = val;
+	if(colour.red < 0.0) colour.red = 0.0; //Negative values causing rendering issues
+	if(colour.green < 0.0) colour.green = 0.0;
+	if(colour.blue < 0.0) colour.blue = 0.0;
+
+	out->red = static_cast<float>(colour.red);
+	out->green = static_cast<float>(colour.green);
+	out->blue = static_cast<float>(colour.blue);
 	out->alpha = white32;
 	return PF_Err_NONE;
 

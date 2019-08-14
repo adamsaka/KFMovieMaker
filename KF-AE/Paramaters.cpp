@@ -59,7 +59,7 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddSlider(ParameterID::keyFrameNumber, "Key Frame", 0, 9999999 ,0, 1, 0, PF_Precision_TEN_THOUSANDTHS);
 	AddDropDown(ParameterID::scalingMode, "Render Method", "Use Cached Frames|Frame by Frame", 1, PF_ParamFlag_CANNOT_TIME_VARY);
 	AddGroupStart(ParameterID::topic_start_colour, "Colours (Outside)");
-	AddDropDown(ParameterID::colourMethod, "Colour Method", "Standard (.kfr Colours)|Distance Estimation (.kfr Colours)|(-|Black and White Wave|Log Steps",1, PF_ParamFlag_CANNOT_TIME_VARY );
+	AddDropDown(ParameterID::colourMethod, "Colour Method", "Standard (.kfr Colours)|Distance Estimation (.kfr Colours)|(-|Sin Wave Black and White|Sin Wave on Palette|Log Steps Black and White|Log Steps Colour",1, PF_ParamFlag_CANNOT_TIME_VARY );
 	AddDropDown(ParameterID::modifier, "Modifier", "Linear|Square Root|Cubic Root|Logarithm", 1);
 	AddSlider(ParameterID::colourDivision, "Iteration Division", 0, 1024,0, 1024, 1, PF_Precision_TEN_THOUSANDTHS);
 	AddCheckBox(ParameterID::smooth, "Smooth Colouring", "", true);

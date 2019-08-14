@@ -73,4 +73,20 @@ struct RGB {
 	}
 };
 
+struct RGBdouble {
+	double red {0};
+	double green {0};
+	double blue {0};
+
+	RGBdouble() {};
+	RGBdouble(double r, double g, double b) {
+		red = r;
+		green = g;
+		blue = b;
+	}
+	bool operator==(const RGBdouble& rhs) {
+		return (red == rhs.red) && (green == rhs.green) && (blue == rhs.blue);
+	}
+};
+
 #endif
