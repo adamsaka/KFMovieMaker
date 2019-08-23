@@ -352,6 +352,8 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ResourceCompile Include="SkeletonPiPL.rc" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\Render-Angle.h" />
+    <ClInclude Include="..\Render-AngleColour.h" />
     <ClInclude Include="..\Render-KFRColouring.h" />
     <ClInclude Include="..\KFBData.h" />
     <ClInclude Include="..\KFMovieMaker.h" />
@@ -362,6 +364,8 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ClInclude Include="..\Render-KFRDistance.h" />
     <ClInclude Include="..\Render-LogStepPalette.h" />
     <ClInclude Include="..\Render-LogSteps.h" />
+    <ClInclude Include="..\Render-Panels.h" />
+    <ClInclude Include="..\Render-PanelsColour.h" />
     <ClInclude Include="..\Render-WaveOnPalette.h" />
     <ClInclude Include="..\Render.h" />
     <ClInclude Include="..\SequenceData.h" />
@@ -373,13 +377,17 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ClCompile Include="..\KFMovieMaker.cpp" />
     <ClCompile Include="..\LocalSequenceData.cpp" />
     <ClCompile Include="..\Paramaters.cpp" />
+    <ClCompile Include="..\Render-Angle.cpp" />
+    <ClCompile Include="..\Render-AngleColour.cpp" />
     <ClCompile Include="..\Render-DarkLightWave.cpp" />
     <ClCompile Include="..\Render-KFRColouring.cpp" />
     <ClCompile Include="..\Render-KFRDistance.cpp" />
     <ClCompile Include="..\Render-LogStepPalette.cpp" />
     <ClCompile Include="..\Render-LogSteps.cpp" />
+    <ClCompile Include="..\Render-Panels.cpp" />
     <ClCompile Include="..\Render-WaveOnPalette.cpp" />
     <ClCompile Include="..\Render.cpp" />
+    <ClCompile Include="..\Render-PanelsColour.cpp" />
     <ClCompile Include="..\SequenceData.cpp" />
     <ClCompile Include="OS_Windows.cpp" />
   </ItemGroup>

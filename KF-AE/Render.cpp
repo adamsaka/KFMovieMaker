@@ -30,6 +30,10 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Render-LogSteps.h"
 #include "Render-WaveOnPalette.h"
 #include "Render-LogStepPalette.h"
+#include "Render-Panels.h"
+#include "Render-PanelsColour.h"
+#include "Render-Angle.h"
+#include "Render-AngleColour.h"
 
 #include <cmath>
 
@@ -96,6 +100,7 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 	auto local = sd->getLocalSequenceData();
 
 	//Read parameters.
+	local->overrideMinimalDistance = false;
 	double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
 	keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
 	local->colourDivision = readFloatSliderParam(in_data, ParameterID::colourDivision);
@@ -105,7 +110,8 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 	local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
 	local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
 	local->insideColour = readColourParam(in_data, ParameterID::insideColour);
-	local->colourOffset = readFloatSliderParam(in_data, ParameterID::colourOffset);
+	double cycle = readAngleParam(in_data, ParameterID::colourCycle)*1024.0/360.0;
+	local->colourOffset = cycle + readFloatSliderParam(in_data, ParameterID::colourOffset);
 	local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
 	local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
 	if(local->slopesEnabled) {
@@ -115,6 +121,9 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 		const double angleRadians = local->slopeAngle * pi / 180;
 		local->slopeAngleX = cos(angleRadians);
 		local->slopeAngleY = sin(angleRadians);
+		local->slopeMethod = readListParam(in_data, ParameterID::slopeMethod);
+		if (local->slopeMethod==2) local->overrideMinimalDistance = true;
+
 	}
 
 	//Setup data for active frame, and next frame.
@@ -269,7 +278,8 @@ PF_Err err {PF_Err_NONE};
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
 		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &tempImage, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
 	}
-	ScaleAroundCentre(in_data,&tempImage, output, &smartRender->input->output_request.rect, 1, 1/tempScale, 1/tempScale, 1.0);
+	double scaleAdjust = 1 + (1 / local->width)*2;
+	ScaleAroundCentre(in_data,&tempImage, output, &smartRender->input->output_request.rect, scaleAdjust, 1/(tempScale) , 1/tempScale, 1.0);
 	
 	suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
 	return err;
@@ -338,9 +348,11 @@ static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_Ef
 	float sY = static_cast<float>(postScaleY);
 	float centreX = static_cast<float>(input->width)/2;
 	float centreY = static_cast<float>(input->height) / 2;
+	//float pixelAdjust = (sX < 1)? 1.0f:0.0f;  //Hack to fix edge pixel issue
+
 
 	//Note: For specifying an AE matrix, the inner brackets is a column.
-	const PF_FloatMatrix activeTrans = {{{s/sX, 0, 0}, {0, s/sY, 0}, {-(s/sX)*(centreX) + (centreX/sX), -(s/sY)*centreY + (centreY/sY), 1}}};
+	const PF_FloatMatrix activeTrans = {{{s/sX, 0, 0}, {0, s/sY, 0}, {-(s/sX)*(centreX) + (centreX/sX) , -(s/sY)*centreY + (centreY/sY) , 1}}};
 
 	PF_CompositeMode comp;
 	AEFX_CLR_STRUCT(comp);
@@ -377,6 +389,14 @@ inline PixelFunction8 selectPixelRenderFunction8(long method) {
 			return Render_LogSteps::Render8;
 		case 7:
 			return Render_LogStepPalette::Render8;
+		case 8:
+			return Render_Panels::Render8;
+		case 9:
+			return Render_PanelsColour::Render8;
+		case 10:
+			return Render_Angle::Render8;
+		case 11:
+			return Render_AngleColour::Render8;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -400,6 +420,14 @@ inline PixelFunction16 selectPixelRenderFunction16(long method) {
 			return Render_LogSteps::Render16;
 		case 7:
 			return Render_LogStepPalette::Render16;
+		case 8:
+			return Render_Panels::Render16;
+		case 9:
+			return Render_PanelsColour::Render16;
+		case 10:
+			return Render_Angle::Render16;
+		case 11:
+			return Render_AngleColour::Render16;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -423,6 +451,14 @@ inline PixelFunction32 selectPixelRenderFunction32(long method) {
 			return Render_LogSteps::Render32;
 		case 7:
 			return Render_LogStepPalette::Render32;
+		case 8:
+			return Render_Panels::Render32;
+		case 9:
+			return Render_PanelsColour::Render32;
+		case 10:
+			return Render_Angle::Render32;
+		case 11:
+			return Render_AngleColour::Render32;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -573,30 +609,65 @@ r,g,b are colour values from 0.0 to 1.0
 p[x][y] is a maxtrix of itaration values around point p[1][1] (may be a minimal cross)
 *******************************************************************************************************/
 void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g, double& b) {
-	float diffx = (p[0][1] - p[2][1])/2.0f ;
-	float diffy = (p[1][0] - p[1][2])/2.0f ;
-	double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
+	if(local->slopeMethod == 1) {
+		//Standard (like KF)
+		float diffx = (p[0][1] - p[2][1]) / 2.0f;
+		float diffy = (p[1][0] - p[1][2]) / 2.0f;
+		double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
 
-	double p1 = fmax(1, p[1][1]);
-	diff = (p1 + diff) / p1;
-	
-	//Different to KF code, as I want it frame independant, might need improving
-	diff = pow(diff, local->slopeShadowDepth * std::log(p[1][1] / 5000 + 1) * (local->width)); 
+		double p1 = fmax(1, p[1][1]);
+		diff = (p1 + diff) / p1;
 
-	if(diff>1) {
-		diff = (atan(diff) - pi / 4) / (pi / 4);
-		diff = diff*local->slopeStrength / 100;
-		r = (1 - diff)*r;
-		g = (1 - diff)*g;
-		b = (1 - diff)*b;
+		//Different to KF code, as I want it frame independant, might need improving
+		diff = pow(diff, local->slopeShadowDepth * std::log(p[1][1] / 5000 + 1) * (local->width));
+
+		if(diff > 1) {
+			diff = (atan(diff) - pi / 4) / (pi / 4);
+			diff = diff*local->slopeStrength / 100;
+			r = (1 - diff)*r;
+			g = (1 - diff)*g;
+			b = (1 - diff)*b;
+		}
+		else {
+			diff = 1 / diff;
+			diff = (atan(diff) - pi / 4) / (pi / 4);
+			diff = diff*local->slopeStrength / 100;;
+			r = (1 - diff)*r + diff;
+			g = (1 - diff)*g + diff;
+			b = (1 - diff)*b + diff;
+		}
 	}
-	else {
-		diff = 1 / diff;
-		diff = (atan(diff) - pi / 4) / (pi / 4);
-		diff = diff*local->slopeStrength / 100;;
-		r = (1 - diff)*r + diff;
-		g = (1 - diff)*g + diff;
-		b = (1 - diff)*b + diff;
+	else if(local->slopeMethod == 2) {
+		//Angle Only
+		float dx = (p[0][1] - p[2][1]);
+		float dy = (p[1][0] - p[1][2]);
+
+		//For clean colouring we need to take colour from nearby pixel at stationaty points.
+		if(dx == 0 && dy == 0) {
+			dx = (p[0][0] - p[2][0]);
+			if(dx == 0) {
+				dx = (p[0][2] - p[2][2]);
+				if(dx == 0) {
+					dy = (p[0][0] - p[0][2]);
+					if(dy == 0) dy = (p[2][0] - p[2][2]);
+				}
+			}
+		}
+		double angle = std::atan2(dy, dx) + pi;
+		angle += (local->slopeAngle / 360.0) *2*pi;
+		double colour = (std::sin(angle) + 1) / 2;
+		
+		
+
+		auto depth = local->slopeShadowDepth / 100;
+		colour = (1 - depth) + colour*depth;
+
+		colour *= 1+(local->slopeStrength / 100);
+
+		
+		r *= colour;
+		g *= colour;
+		b *= colour;
 	}
 }
 
@@ -639,6 +710,8 @@ void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local,
 Build distance matrix for static cached image in a way that will work with cached image scaling.
 This is required because DE is faked using pixel values.
 It interpolate over smaller distances near the centre of the image
+
+minmal (default=false) will only fill a cross (unless overidden in local)
 *******************************************************************************************************/
 void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool minimal) {
 	float step = 0.5;
@@ -665,7 +738,8 @@ void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequence
 	float percent = std::min(percentX, percentY);
 	step = std::exp(-std::log(2.0f)*percent); //Assumes zoom size 2
 
-	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step, minimal);
+	bool min = minimal && !local->overrideMinimalDistance;
+	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step, min);
 }
 
 /*******************************************************************************************************

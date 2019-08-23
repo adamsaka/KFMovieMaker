@@ -67,7 +67,9 @@ class LocalSequenceData {
 		double slopeAngle {0};
 		double slopeAngleX {0};
 		double slopeAngleY {0};
-		
+		long slopeMethod {1};
+		bool overrideMinimalDistance {false};  ///Get the full matrix, regardless of request because its needed for slopes
+
 		std::shared_ptr<KFBData> activeKFB {nullptr};
 		long activeFrameNumber {-1};
 		double activeZoomScale {1};
@@ -98,6 +100,7 @@ class LocalSequenceData {
 			cache_slopeShadowDepth = slopeShadowDepth;
 			cache_slopeStrength = slopeStrength;
 			cache_slopeAngle = slopeAngle;
+			cache_slopeMethod = slopeMethod;
 		};
 
 		///Check if any parameters that would invalidate the cache have changed
@@ -115,7 +118,8 @@ class LocalSequenceData {
 				cache_slopesEnabled == slopesEnabled &&
 				cache_slopeShadowDepth == slopeShadowDepth &&
 				cache_slopeStrength == slopeStrength &&
-				cache_slopeAngle == slopeAngle
+				cache_slopeAngle == slopeAngle &&
+				cache_slopeMethod == slopeMethod
 					
 				);
 		}
@@ -136,6 +140,7 @@ private:
 		double cache_slopeShadowDepth {0};
 		double cache_slopeStrength {0};
 		double cache_slopeAngle {0};
+		long cache_slopeMethod {1};
 
 		void clear();
 		void getKFBlist();

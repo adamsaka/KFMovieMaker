@@ -40,6 +40,8 @@ enum class ParameterID : long {
 	slopeShadowDepth,
 	slopeStrength,
 	slopeAngle,
+	colourCycle,
+	slopeMethod,
 	__last,  //Must be last (used for array memory allocation)
 };
 
