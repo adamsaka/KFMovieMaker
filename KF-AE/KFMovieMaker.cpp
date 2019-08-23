@@ -82,11 +82,11 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData	*in_data, PF_OutData *out_data, PF_Param
 			break;
 		
 		case PF_Cmd_SMART_PRE_RENDER:
-			SmartPreRender(in_data, out_data,  reinterpret_cast<PF_PreRenderExtra*>(extra));
+			err = SmartPreRender(in_data, out_data,  reinterpret_cast<PF_PreRenderExtra*>(extra));
 			break;
 		
 		case PF_Cmd_SMART_RENDER:
-			SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
+			err = SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
 			break;
 		
 		}
