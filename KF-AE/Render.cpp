@@ -51,8 +51,8 @@ inline PixelFunction16 selectPixelRenderFunction16(long method);
 inline PixelFunction32 selectPixelRenderFunction32(long method);
 static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
 static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
-static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
-static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
+static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
+static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
 
 /*******************************************************************************************************
 Pre Render
@@ -222,73 +222,86 @@ artifacts.  Oversampling has dramatically improved the result.
 In theory this probably limits the output resolution to 16k x 16k, which should be fine for now.
 *******************************************************************************************************/
 static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
-PF_Err err {PF_Err_NONE};
-	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	if(local->isCacheInvalid()) {
+	try {
+		PF_Err err {PF_Err_NONE};
+		AEGP_SuiteHandler suites(in_data->pica_basicP);
+		if(local->isCacheInvalid()) {
+			if(local->activeKFB) local->activeKFB->DisposeOfCache();
+			if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
+		}
+
+		if(!local->activeKFB->isImageCached) {
+			makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
+			
+		}
+
+		if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
+			auto backup = local->activeKFB;
+			local->activeKFB = local->nextFrameKFB;
+			makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
+			local->activeKFB = backup;
+		}
+
+		//Intermediate Render Stage
+		double nextOpacity = local->keyFramePercent;
+		PF_EffectWorld tempImage {};
+		AEGP_WorldH tempImageAEGP {};
+		constexpr double tempScale = 2.0;
+		int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
+		int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
+
+		//Create a new "world" (aka, and image buffer).
+		switch(smartRender->input->bitdepth) {
+			case 8:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &tempImageAEGP);
+				if(err) throw (err);
+				break;
+			case 16:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &tempImageAEGP);
+				if(err) throw (err);
+				break;
+			case 32:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &tempImageAEGP);
+				if(err) throw (err);
+				break;
+			default:
+				break;
+		}
+		
+		err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(tempImageAEGP, &tempImage);
+		if(err) throw (err);
+
+
+		PF_LRect rectOut {0, 0, width, height};
+		ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &tempImage, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
+		
+		if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
+			ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &tempImage, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
+			
+		}
+		double scaleAdjust = 1 + (1 / local->width) * 2;
+		ScaleAroundCentre(in_data, &tempImage, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
+		
+
+		suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
+		return err;
+	}
+	catch(PF_Err &thrown_err) {
 		if(local->activeKFB) local->activeKFB->DisposeOfCache();
 		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
+		throw(thrown_err);
 	}
-
-	if(!local->activeKFB->isImageCached) {
-		err = makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
-		if(err) return err;
+	catch(std::exception ex) {
+		if(local->activeKFB) local->activeKFB->DisposeOfCache();
+		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
+		throw(ex);
 	}
-
-	if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
-		auto backup = local->activeKFB;
-		local->activeKFB = local->nextFrameKFB;
-		err = makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
-		local->activeKFB = backup;
-		
-		if(err) {
-			local->activeKFB->DisposeOfCache(); //also dispose of active cached image
-			return err;
-		}
-	}
-
-	//Intermediate Render Stage
-	double nextOpacity = local->keyFramePercent;
-	PF_EffectWorld tempImage {};				
-	AEGP_WorldH tempImageAEGP {};				
-	constexpr double tempScale = 2.0;
-	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX) ;
-	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
-
-	//Create a new "world" (aka, and image buffer).
-	switch(smartRender->input->bitdepth) {
-		case 8:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &tempImageAEGP);
-			break;
-		case 16:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &tempImageAEGP);
-			break;
-		case 32:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &tempImageAEGP);
-			break;
-		default:
-			break;
-	}
-	if(err) return err;
-	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(tempImageAEGP, &tempImage);
-	if(err) return err;
-	
-	
-	PF_LRect rectOut {0, 0, width, height};
-	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &tempImage, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
-	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &tempImage, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
-	}
-	double scaleAdjust = 1 + (1 / local->width)*2;
-	ScaleAroundCentre(in_data,&tempImage, output, &smartRender->input->output_request.rect, scaleAdjust, 1/(tempScale) , 1/tempScale, 1.0);
-	
-	suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
-	return err;
 }
 
 /*******************************************************************************************************
 Make a chached image of the .kfb
 *******************************************************************************************************/
-static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local) {
+static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local) {
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	AEFX_CLR_STRUCT(kfb->cachedImage);
@@ -309,9 +322,10 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 		default:
 			break;
 	}
-	if(err) return err;
+	if(err) throw(err);
 	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(kfb->cachedImageAEGP, &kfb->cachedImage);
-	
+	if(err) throw(err);
+
 	//Adjust zoom scales, because we don't want a zoomed image, then call GenerateImage
 	auto backup1 = local->keyFramePercent;
 	auto backup2 = local->activeZoomScale;
@@ -320,6 +334,7 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	local->activeZoomScale = 1;
 	local->nextZoomScale = 0;
 	err = GenerateImage(in_data, smartRender, &kfb->cachedImage , local);
+	if(err) throw(err);
 	local->keyFramePercent = backup1;
 	local->activeZoomScale = backup2;
 	local->nextZoomScale = backup3;
@@ -330,7 +345,7 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 	else {
 		local->activeKFB->DisposeOfCache();
 	}
-	return err;
+	return;
 }
 
 
@@ -339,32 +354,31 @@ static PF_Err makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_
 /*******************************************************************************************************
 Scales the input image about its centre, and writes it to output.
 *******************************************************************************************************/
-static PF_Err ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity) {
-	PF_Err err {PF_Err_NONE};
+static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity) {
+	
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	//suites.WorldTransformSuite1()->copy(in_data->effect_ref, &local->activeKFB->cachedImage,output, &smartRender->input->output_request.rect , &smartRender->input->output_request.rect);
 	float s = static_cast<float>(scale);
 	float sX = static_cast<float>(postScaleX);
 	float sY = static_cast<float>(postScaleY);
-	float centreX = static_cast<float>(input->width)/2;
+	float centreX = static_cast<float>(input->width) / 2;
 	float centreY = static_cast<float>(input->height) / 2;
 	//float pixelAdjust = (sX < 1)? 1.0f:0.0f;  //Hack to fix edge pixel issue
 
 
 	//Note: For specifying an AE matrix, the inner brackets is a column.
-	const PF_FloatMatrix activeTrans = {{{s/sX, 0, 0}, {0, s/sY, 0}, {-(s/sX)*(centreX) + (centreX/sX) , -(s/sY)*centreY + (centreY/sY) , 1}}};
+	const PF_FloatMatrix activeTrans = {{{s / sX, 0, 0}, {0, s / sY, 0}, {-(s / sX)*(centreX)+(centreX / sX), -(s / sY)*centreY + (centreY / sY), 1}}};
 
 	PF_CompositeMode comp;
 	AEFX_CLR_STRUCT(comp);
-	comp.xfer =  PF_Xfer_IN_FRONT; 
+	comp.xfer = PF_Xfer_IN_FRONT;
 	comp.opacity = roundTo8Bit(opacity * white8);
 	comp.opacitySu = roundTo16Bit(std::round(opacity * white16));
-	
-	
 
-	err = suites.WorldTransformSuite1()->transform_world(in_data->effect_ref, PF_Quality_HI, 0, in_data->field, input, &comp, nullptr, &activeTrans, 1, true, rect, output);
-	
-	return err;
+
+
+	auto err = suites.WorldTransformSuite1()->transform_world(in_data->effect_ref, PF_Quality_HI, 0, in_data->field, input, &comp, nullptr, &activeTrans, 1, true, rect, output);
+	if(err) throw (err);
 }
 
 

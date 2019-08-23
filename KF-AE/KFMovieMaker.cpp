@@ -98,12 +98,7 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData	*in_data, PF_OutData *out_data, PF_Param
 		strncpy_s(out_data->return_msg, ex.what(), 256);
 		out_data->out_flags |= PF_OutFlag_DISPLAY_ERROR_MESSAGE;
 	}
-	/*catch (...) {
-		//Catch unknown exceptions here, hopefully this won't happen, but there is no reason to also crash After Effects if we generate an exception.
-			err = PF_Err_INTERNAL_STRUCT_DAMAGED;
-	}*/
-
-	
+		
 	return err;
 }
 
