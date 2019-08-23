@@ -49,8 +49,8 @@ static PF_Err SetToBlack16(void *refcon, A_long xL, A_long yL, PF_Pixel16 *inP, 
 inline PixelFunction8 selectPixelRenderFunction8(long method);
 inline PixelFunction16 selectPixelRenderFunction16(long method);
 inline PixelFunction32 selectPixelRenderFunction32(long method);
-static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
-static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
+static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
+static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
 static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
 static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
 
@@ -178,8 +178,7 @@ inline void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long righ
 /*******************************************************************************************************
 Actually generate the image in the output buffer.
 *******************************************************************************************************/
-static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
-	PF_Err err {PF_Err_NONE};
+static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	const auto bitDepth = smartRender->input->bitdepth;
 	
@@ -189,26 +188,29 @@ static PF_Err GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender
 		case 8:
 			{
 				auto fn = selectPixelRenderFunction8(local->method);
-				err = suites.Iterate8Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				auto err = suites.Iterate8Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				if(err) throw (err);
 				break;
 			}
 		case 16:
 			{
 				auto fn = selectPixelRenderFunction16(local->method);
-				err = suites.Iterate16Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				auto err = suites.Iterate16Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				if(err) throw (err);
 				break;
 			}
 		case 32:
 			{
 				auto fn = selectPixelRenderFunction32(local->method);
-				err = suites.IterateFloatSuite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				auto err = suites.IterateFloatSuite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+				if(err) throw (err);
 				break;
 			}
 		default:
 			break;
 	}
 
-	return err;
+	return;
 
 }
 
@@ -221,7 +223,7 @@ AE was producing very ugly results scaling images to between 95% and 99% creatin
 artifacts.  Oversampling has dramatically improved the result.
 In theory this probably limits the output resolution to 16k x 16k, which should be fine for now.
 *******************************************************************************************************/
-static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
+static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
 	try {
 		PF_Err err {PF_Err_NONE};
 		AEGP_SuiteHandler suites(in_data->pica_basicP);
@@ -284,7 +286,7 @@ static PF_Err DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRende
 		
 
 		suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
-		return err;
+		return;
 	}
 	catch(PF_Err &thrown_err) {
 		if(local->activeKFB) local->activeKFB->DisposeOfCache();
@@ -333,8 +335,8 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	local->keyFramePercent = 0;
 	local->activeZoomScale = 1;
 	local->nextZoomScale = 0;
-	err = GenerateImage(in_data, smartRender, &kfb->cachedImage , local);
-	if(err) throw(err);
+	GenerateImage(in_data, smartRender, &kfb->cachedImage , local);
+	
 	local->keyFramePercent = backup1;
 	local->activeZoomScale = backup2;
 	local->nextZoomScale = backup3;
