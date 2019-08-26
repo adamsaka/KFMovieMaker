@@ -96,7 +96,7 @@ Releases the cached image for this kfb data.
 void KFBData::DisposeOfCache() {
 	if(!this) return;  
 	AEGP_SuiteHandler suites(globalTL_in_data->pica_basicP);
-	if(this->isImageCached) {
+	if(this->isImageCached && this->cachedImageAEGP) {
 		suites.WorldSuite3()->AEGP_Dispose(this->cachedImageAEGP);
 	}
 	this->isImageCached = false;

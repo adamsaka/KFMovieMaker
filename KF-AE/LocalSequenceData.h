@@ -83,6 +83,7 @@ class LocalSequenceData {
 
 		void SetupFileData(const std::string & fileName);
 		void SetupActiveKFB(long keyFrame, PF_InData *in_data);
+		void DeleteKFBData();
 
 		///Save a copy of parameters that might invalidate the cache.
 		void saveCachedParameters() {

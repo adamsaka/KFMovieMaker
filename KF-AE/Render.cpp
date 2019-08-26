@@ -93,64 +93,75 @@ Smart Render
 PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra* smartRender) {
 	PF_Err err {PF_Err_NONE};
 
-	//Check that sequence data is ready to render
+	//Check that sequence data is ready to render, and extract localdata
 	auto sd = SequenceData::GetSequenceData(in_data);
 	if(!sd) return PF_Err_INTERNAL_STRUCT_DAMAGED;
 	if(!sd->Validate()) return PF_Err_NONE;
 	auto local = sd->getLocalSequenceData();
+	if(!local) PF_Err_INTERNAL_STRUCT_DAMAGED;
 
-	//Read parameters.
-	local->overrideMinimalDistance = false;
-	double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
-	keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
-	local->colourDivision = readFloatSliderParam(in_data, ParameterID::colourDivision);
-	if(local->colourDivision == 0) local->colourDivision = 0.000001;
-	local->method = readListParam(in_data, ParameterID::colourMethod);
-	local->modifier = readListParam(in_data, ParameterID::modifier);
-	local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
-	local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
-	local->insideColour = readColourParam(in_data, ParameterID::insideColour);
-	double cycle = readAngleParam(in_data, ParameterID::colourCycle)*1024.0/360.0;
-	local->colourOffset = cycle + readFloatSliderParam(in_data, ParameterID::colourOffset);
-	local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
-	local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
-	if(local->slopesEnabled) {
-		local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
-		local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
-		local->slopeAngle = readAngleParam(in_data, ParameterID::slopeAngle);
-		const double angleRadians = local->slopeAngle * pi / 180;
-		local->slopeAngleX = cos(angleRadians);
-		local->slopeAngleY = sin(angleRadians);
-		local->slopeMethod = readListParam(in_data, ParameterID::slopeMethod);
-		if (local->slopeMethod==2) local->overrideMinimalDistance = true;
+	try {
+		//Read parameters.
+		local->overrideMinimalDistance = false;
+		double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
+		keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
+		local->colourDivision = readFloatSliderParam(in_data, ParameterID::colourDivision);
+		if(local->colourDivision == 0) local->colourDivision = 0.000001;
+		local->method = readListParam(in_data, ParameterID::colourMethod);
+		local->modifier = readListParam(in_data, ParameterID::modifier);
+		local->useSmooth = readCheckBoxParam(in_data, ParameterID::smooth);
+		local->scalingMode = readListParam(in_data, ParameterID::scalingMode);
+		local->insideColour = readColourParam(in_data, ParameterID::insideColour);
+		double cycle = readAngleParam(in_data, ParameterID::colourCycle)*1024.0 / 360.0;
+		local->colourOffset = cycle + readFloatSliderParam(in_data, ParameterID::colourOffset);
+		local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
+		local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
+		if(local->slopesEnabled) {
+			local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
+			local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
+			local->slopeAngle = readAngleParam(in_data, ParameterID::slopeAngle);
+			const double angleRadians = local->slopeAngle * pi / 180;
+			local->slopeAngleX = cos(angleRadians);
+			local->slopeAngleY = sin(angleRadians);
+			local->slopeMethod = readListParam(in_data, ParameterID::slopeMethod);
+			if(local->slopeMethod == 2) local->overrideMinimalDistance = true;
 
+		}
+
+		//Setup data for active frame, and next frame.
+		long activeFrame = static_cast<long>(std::floor(keyFrame));
+		local->keyFramePercent = keyFrame - activeFrame;
+		local->activeZoomScale = std::exp(std::log(2) * (keyFrame - activeFrame));
+		local->nextZoomScale = std::exp(std::log(2) * (keyFrame - 1 - activeFrame));
+		local->SetupActiveKFB(activeFrame, in_data);
+		local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
+		local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
+		local->bitDepth = smartRender->input->bitdepth;
+
+
+		//Checkout Output buffer
+		PF_EffectWorld* output {nullptr};
+		err = smartRender->cb->checkout_output(in_data->effect_ref, &output);
+		if(err != PF_Err_NONE) throw(err);
+
+		//Actually begin rendering
+		if(local->scalingMode == 1) {
+			DoCachedImages(in_data, smartRender, output, local);
+		}
+		else {
+			GenerateImage(in_data, smartRender, output, local);
+		}
+
+		return err;
 	}
-
-	//Setup data for active frame, and next frame.
-	long activeFrame = static_cast<long>(std::floor(keyFrame));
-	local->keyFramePercent = keyFrame - activeFrame;
-	local->activeZoomScale = std::exp(std::log(2) * (keyFrame - activeFrame));
-	local->nextZoomScale = std::exp(std::log(2) * (keyFrame - 1 - activeFrame));
-	local->SetupActiveKFB(activeFrame, in_data);
-	local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
-	local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
-	local->bitDepth = smartRender->input->bitdepth;
-
-
-	//Checkout Output buffer
-	PF_EffectWorld* output {nullptr};
-	err = smartRender->cb->checkout_output(in_data->effect_ref, &output);
-	if(err != PF_Err_NONE) return err;
-
-	//Actually begin rendering
-	if(local->scalingMode == 1) {
-		DoCachedImages(in_data, smartRender, output, local);
+	catch(PF_Err &thrown_err) {
+		local->DeleteKFBData();
+		return thrown_err;
 	}
-	else {
-		GenerateImage(in_data, smartRender, output, local);
+	catch(std::exception ex) {
+		local->DeleteKFBData();
+		throw(ex);
 	}
-
-	return err;
 }
 
 /*******************************************************************************************************
@@ -173,18 +184,15 @@ inline void setOuputRectangle(PF_PreRenderExtra* preRender, long left, long righ
 	preRender->output->result_rect.right = right;
 }
 
-
-
 /*******************************************************************************************************
 Actually generate the image in the output buffer.
+Calls a pixel iterator based on bit depth
+Note: Iterators will often return errors, usually because the render is canceled.
 *******************************************************************************************************/
 static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	const auto bitDepth = smartRender->input->bitdepth;
 	
-
-	//Call the appropriate pixel iterator
-	switch(bitDepth) {
+	switch(smartRender->input->bitdepth) {
 		case 8:
 			{
 				auto fn = selectPixelRenderFunction8(local->method);
@@ -209,9 +217,6 @@ static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, 
 		default:
 			break;
 	}
-
-	return;
-
 }
 
 /*******************************************************************************************************
@@ -219,85 +224,74 @@ Render using the chached image method.
 
 Note: I now render to an temporary buffer first which is twice the requested resolution.
 The cached images are blended on this buffer, then it is downsampled.
-AE was producing very ugly results scaling images to between 95% and 99% creating, creating very messy
+AE was producing very ugly results scaling images to between 95% and 99%, creating very messy
 artifacts.  Oversampling has dramatically improved the result.
 In theory this probably limits the output resolution to 16k x 16k, which should be fine for now.
 *******************************************************************************************************/
 static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
-	try {
-		PF_Err err {PF_Err_NONE};
-		AEGP_SuiteHandler suites(in_data->pica_basicP);
-		if(local->isCacheInvalid()) {
-			if(local->activeKFB) local->activeKFB->DisposeOfCache();
-			if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
-		}
-
-		if(!local->activeKFB->isImageCached) {
-			makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
-			
-		}
-
-		if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
-			auto backup = local->activeKFB;
-			local->activeKFB = local->nextFrameKFB;
-			makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
-			local->activeKFB = backup;
-		}
-
-		//Intermediate Render Stage
-		double nextOpacity = local->keyFramePercent;
-		PF_EffectWorld tempImage {};
-		AEGP_WorldH tempImageAEGP {};
-		constexpr double tempScale = 2.0;
-		int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
-		int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
-
-		//Create a new "world" (aka, and image buffer).
-		switch(smartRender->input->bitdepth) {
-			case 8:
-				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &tempImageAEGP);
-				if(err) throw (err);
-				break;
-			case 16:
-				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &tempImageAEGP);
-				if(err) throw (err);
-				break;
-			case 32:
-				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &tempImageAEGP);
-				if(err) throw (err);
-				break;
-			default:
-				break;
-		}
-		
-		err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(tempImageAEGP, &tempImage);
-		if(err) throw (err);
-
-
-		PF_LRect rectOut {0, 0, width, height};
-		ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &tempImage, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
-		
-		if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-			ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &tempImage, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
-			
-		}
-		double scaleAdjust = 1 + (1 / local->width) * 2;
-		ScaleAroundCentre(in_data, &tempImage, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
-		
-
-		suites.WorldSuite3()->AEGP_Dispose(tempImageAEGP);
-		return;
-	}
-	catch(PF_Err &thrown_err) {
+	
+	PF_Err err {PF_Err_NONE};
+	AEGP_SuiteHandler suites(in_data->pica_basicP);
+	if(local->isCacheInvalid()) {
 		if(local->activeKFB) local->activeKFB->DisposeOfCache();
 		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
-		throw(thrown_err);
 	}
-	catch(std::exception ex) {
-		if(local->activeKFB) local->activeKFB->DisposeOfCache();
-		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
-		throw(ex);
+
+	if(!local->activeKFB->isImageCached) {
+		makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
+			
 	}
+
+	if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
+		auto backup = local->activeKFB;
+		local->activeKFB = local->nextFrameKFB;
+		makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
+		local->activeKFB = backup;
+	}
+
+	//Intermediate Render Stage
+	double nextOpacity = local->keyFramePercent;
+	
+	WorldHolder temp;
+	constexpr double tempScale = 2.0;
+	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
+	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
+
+	//Create a new "world" (aka, and image buffer).
+	switch(smartRender->input->bitdepth) {
+		case 8:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &temp.handle);
+			if(err) throw (err);
+			break;
+		case 16:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &temp.handle);
+			if(err) throw (err);
+			break;
+		case 32:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &temp.handle);
+			if(err) throw (err);
+			break;
+		default:
+			break;
+	}
+	
+	
+	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(temp.handle, &temp.effectWorld);
+	if(err) throw (err);
+	
+
+	PF_LRect rectOut {0, 0, width, height};
+	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &temp.effectWorld, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
+
+	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &temp.effectWorld, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
+
+	}
+	double scaleAdjust = 1 + (1 / local->width) * 2;
+	ScaleAroundCentre(in_data, &temp.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
+
+	return;
+	
 }
 
 /*******************************************************************************************************
@@ -310,21 +304,24 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	int width = static_cast<int>(kfb->getWidth() / local->scaleFactorX);
 	int height = static_cast<int>(kfb->getHeight() / local->scaleFactorY);
 	
-	//Create a new "world" (aka, and image buffer).
+	//Create a new "world" (aka, an image buffer).
 	switch(smartRender->input->bitdepth) {
 		case 8:
 			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height,&kfb->cachedImageAEGP);
+			if(err) throw(err);
 			break;
 		case 16:
 			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &kfb->cachedImageAEGP);
+			if(err) throw(err);
 			break;
 		case 32:
 			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &kfb->cachedImageAEGP);
+			if(err) throw(err);
 			break;
 		default:
 			break;
 	}
-	if(err) throw(err);
+	
 	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(kfb->cachedImageAEGP, &kfb->cachedImage);
 	if(err) throw(err);
 
@@ -336,18 +333,12 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	local->activeZoomScale = 1;
 	local->nextZoomScale = 0;
 	GenerateImage(in_data, smartRender, &kfb->cachedImage , local);
-	
 	local->keyFramePercent = backup1;
 	local->activeZoomScale = backup2;
 	local->nextZoomScale = backup3;
-	if(!err) {
-		kfb->isImageCached = true;
-		local->saveCachedParameters();
-	}
-	else {
-		local->activeKFB->DisposeOfCache();
-	}
-	return;
+	
+	kfb->isImageCached = true;
+	local->saveCachedParameters();
 }
 
 
@@ -357,17 +348,13 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 Scales the input image about its centre, and writes it to output.
 *******************************************************************************************************/
 static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity) {
-	
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	//suites.WorldTransformSuite1()->copy(in_data->effect_ref, &local->activeKFB->cachedImage,output, &smartRender->input->output_request.rect , &smartRender->input->output_request.rect);
-	float s = static_cast<float>(scale);
-	float sX = static_cast<float>(postScaleX);
-	float sY = static_cast<float>(postScaleY);
-	float centreX = static_cast<float>(input->width) / 2;
-	float centreY = static_cast<float>(input->height) / 2;
-	//float pixelAdjust = (sX < 1)? 1.0f:0.0f;  //Hack to fix edge pixel issue
-
-
+	const float s = static_cast<float>(scale);
+	const float sX = static_cast<float>(postScaleX);
+	const float sY = static_cast<float>(postScaleY);
+	const float centreX = static_cast<float>(input->width) / 2;
+	const float centreY = static_cast<float>(input->height) / 2;
+	
 	//Note: For specifying an AE matrix, the inner brackets is a column.
 	const PF_FloatMatrix activeTrans = {{{s / sX, 0, 0}, {0, s / sY, 0}, {-(s / sX)*(centreX)+(centreX / sX), -(s / sY)*centreY + (centreY / sY), 1}}};
 
@@ -377,14 +364,9 @@ static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_Effe
 	comp.opacity = roundTo8Bit(opacity * white8);
 	comp.opacitySu = roundTo16Bit(std::round(opacity * white16));
 
-
-
 	auto err = suites.WorldTransformSuite1()->transform_world(in_data->effect_ref, PF_Quality_HI, 0, in_data->field, input, &comp, nullptr, &activeTrans, 1, true, rect, output);
 	if(err) throw (err);
 }
-
-
-
 
 
 /*******************************************************************************************************
@@ -501,9 +483,6 @@ double doModifier(long modifier, double it) {
 }
 
 
-
-
-
 /*******************************************************************************************************
 Calculates the interation count for (x,y) by blending frames.
 Note: Must be thread-safe, so "LocalSequenceData" should be read-only.
@@ -519,8 +498,6 @@ double GetBlendedPixelValue(const LocalSequenceData* local, A_long x, A_long y) 
 	double yLocation = yCentre / local->activeZoomScale + halfHeight;
 
 	double iCount = local->activeKFB->calculateIterationCountBiCubic(static_cast<float>(xLocation), static_cast<float>(yLocation), local->useSmooth);
-
-	
 
 	//Get iteration count from the same location in the next frame (we overlay this image)
 	if(local->nextFrameKFB && local->keyFramePercent > 0.01 && local->nextZoomScale >0) {
@@ -669,18 +646,15 @@ void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g
 				}
 			}
 		}
+
 		double angle = std::atan2(dy, dx) + pi;
 		angle += (local->slopeAngle / 360.0) *2*pi;
 		double colour = (std::sin(angle) + 1) / 2;
 		
-		
-
 		auto depth = local->slopeShadowDepth / 100;
 		colour = (1 - depth) + colour*depth;
 
 		colour *= 1+(local->slopeStrength / 100);
-
-		
 		r *= colour;
 		g *= colour;
 		b *= colour;
@@ -696,13 +670,12 @@ For use in frame-by-frame (not suitable for cached images).
 No intra-frame complensation, so will create the pulsating look.
 *******************************************************************************************************/
 void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
-	const double halfWidth = static_cast<double>(local->width) / 2;
-	const double halfHeight = static_cast<double>(local->height) / 2;
+	const double halfWidth = static_cast<double>(local->width) / 2.0;
+	const double halfHeight = static_cast<double>(local->height) / 2.0;
 	const double xCentre = (x * local->scaleFactorX) - halfWidth;
 	const double yCentre = (y * local->scaleFactorY) - halfHeight;
 	double xLocation = xCentre / local->activeZoomScale + halfWidth;
 	double yLocation = yCentre / local->activeZoomScale + halfHeight;
-
 
 	local->activeKFB->getDistanceMatrix(matrix, static_cast<float>(xLocation), static_cast<float>(yLocation), 1 / static_cast<float>(local->activeZoomScale));
 

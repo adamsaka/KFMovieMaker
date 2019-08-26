@@ -89,4 +89,19 @@ struct RGBdouble {
 	}
 };
 
+
+//Wrapper struct around an effectWorld and handle to ensure it is released.
+struct WorldHolder {
+	AEGP_WorldH handle {};
+	PF_EffectWorld effectWorld {};
+	~WorldHolder() {
+		if(handle) {
+			AEGP_SuiteHandler suites(globalTL_in_data->pica_basicP);
+			suites.WorldSuite3()->AEGP_Dispose(handle);
+			handle = nullptr;
+		}
+	}
+};
+
+
 #endif

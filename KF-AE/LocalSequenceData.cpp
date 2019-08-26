@@ -32,6 +32,7 @@ namespace fs = std::experimental::filesystem;
 Constructor
 *******************************************************************************************************/
 LocalSequenceData::LocalSequenceData()
+
 {
 }
 
@@ -182,6 +183,13 @@ void LocalSequenceData::SetupActiveKFB(long keyFrame, PF_InData *in_data) {
 	}
 	
 	
+}
+
+void LocalSequenceData::DeleteKFBData() {
+	this->activeFrameNumber = -1;
+	this->activeKFB = nullptr;
+	this->nextFrameNumber = -1;
+	this->nextFrameKFB = nullptr;
 }
 
 /*******************************************************************************************************
