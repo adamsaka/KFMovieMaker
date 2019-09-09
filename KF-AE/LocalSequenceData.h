@@ -78,6 +78,8 @@ class LocalSequenceData {
 		long nextFrameNumber {-1};
 		double nextZoomScale {2};
 		
+		WorldHolder tempImageBuffer;
+
 
 		LocalSequenceData();
 

@@ -252,43 +252,45 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 	//Intermediate Render Stage
 	double nextOpacity = local->keyFramePercent;
 	
-	WorldHolder temp;
 	constexpr double tempScale = 2.0;
 	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
 	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
-
-	//Create a new "world" (aka, and image buffer).
-	switch(smartRender->input->bitdepth) {
-		case 8:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &temp.handle);
-			if(err) throw (err);
-			break;
-		case 16:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &temp.handle);
-			if(err) throw (err);
-			break;
-		case 32:
-			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &temp.handle);
-			if(err) throw (err);
-			break;
-		default:
-			break;
+	
+	if(local->tempImageBuffer.bitDepth != smartRender->input->bitdepth) local->tempImageBuffer.Destroy();
+	if(!local->tempImageBuffer.handle) {
+		//Create a new "world" (aka, an image buffer).
+		switch(smartRender->input->bitdepth) {
+			case 8:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &local->tempImageBuffer.handle);
+				if(err) throw (err);
+				break;
+			case 16:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &local->tempImageBuffer.handle);
+				if(err) throw (err);
+				break;
+			case 32:
+				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &local->tempImageBuffer.handle);
+				if(err) throw (err);
+				break;
+			default:
+				break;
+		}
 	}
 	
 	
-	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(temp.handle, &temp.effectWorld);
+	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(local->tempImageBuffer.handle, &local->tempImageBuffer.effectWorld);
 	if(err) throw (err);
 	
 
 	PF_LRect rectOut {0, 0, width, height};
-	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &temp.effectWorld, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
+	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
 
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &temp.effectWorld, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
 
 	}
 	double scaleAdjust = 1 + (1 / local->width) * 2;
-	ScaleAroundCentre(in_data, &temp.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
+	ScaleAroundCentre(in_data, &local->tempImageBuffer.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
 
 	return;
 	

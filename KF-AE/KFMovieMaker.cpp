@@ -88,7 +88,6 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData	*in_data, PF_OutData *out_data, PF_Param
 		case PF_Cmd_SMART_RENDER:
 			err = SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
 			break;
-		
 		}
 	}
 	catch (PF_Err &thrown_err) {
