@@ -256,7 +256,10 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
 	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
 	
-	if(local->tempImageBuffer.bitDepth != smartRender->input->bitdepth) local->tempImageBuffer.Destroy();
+	if(local->tempImageBuffer.handle && (local->tempImageBuffer.bitDepth != smartRender->input->bitdepth || local->tempImageBuffer.effectWorld.width != width || local->tempImageBuffer.effectWorld.height != height)) {
+		local->tempImageBuffer.Destroy();
+	}
+
 	if(!local->tempImageBuffer.handle) {
 		//Create a new "world" (aka, an image buffer).
 		switch(smartRender->input->bitdepth) {
@@ -275,6 +278,10 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 			default:
 				break;
 		}
+		local->tempImageBuffer.bitDepth = smartRender->input->bitdepth;
+	}
+	else {
+	
 	}
 	
 	

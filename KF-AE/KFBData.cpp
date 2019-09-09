@@ -106,8 +106,6 @@ void KFBData::DisposeOfCache() {
 
 
 void KFBData::ReadKFBFile(std::string fileName) {
-	
-
 	//Readfile
 	std::ifstream file {fileName, std::ios::binary | std::ios::in};
 	if(!file) throw (std::exception("Unable to open KFB file\n"));
@@ -151,16 +149,16 @@ void KFBData::ReadKFBFile(std::string fileName) {
 
 	//Read (raw) smooth data;
 	auto smooth = this->getSmoothData();
+	float temp;
 	for(long x = 0; x < width; x++) {
 		for(long y = 0; y < height; y++) {
-			file.read((char*)&smooth[makeIndex(x+paddingSize, y+paddingSize)], sizeof(float));
+			file.read((char*)&temp, sizeof(temp));
+			const auto index = makeIndex(x + paddingSize, y + paddingSize);
+			smooth[index] = static_cast<float>(data[index]) + 1 - temp;
 		}
 	}
 	
-	//Caclulate smooth data by mixing with iteration data.
-	for(int i = 0; i < memWidth*memHeight; i++) {
-		smooth[i] = static_cast<float>(data[i]) + 1 - smooth[i];
-	}
+
 
 	//Assign extapolated values to padded iteration values.
 	for(int x = 0; x < memWidth; x++) {
