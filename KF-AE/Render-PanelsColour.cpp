@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 constexpr double logScale = 10;
 constexpr double greyColour = 1.0; //Peak grey colour
 constexpr double curveSize = 0.1;  //size of smoothed curve
-constexpr double blackSize = 0.01; //size of black gutter at each end.
+
 constexpr double overshoot = 0.002; //Overshoot the top of the sin wave, gives a subtle highlight
 
 static const double internalColour = greyColour * std::sin(((curveSize + overshoot) / curveSize) * pi / 2);
@@ -29,28 +29,41 @@ static const double internalColour = greyColour * std::sin(((curveSize + oversho
 /*******************************************************************************************************
 Rendering Code common to all bit depths
 *******************************************************************************************************/
-inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
+inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
 	double iCount = GetBlendedPixelValue(local, x, y);
-	if(iCount >= local->activeKFB->maxIterations)  return RGBdouble(-1, -1, -1);  //Inside pixel
+	if(iCount >= local->activeKFB->maxIterations)  return ARGBdouble(-1, -1, -1, -1);  //Inside pixel
 
 	iCount = doModifier(local->modifier, iCount);
 	iCount /= local->colourDivision;
 	iCount += local->colourOffset;
 
-	//Get Colours
-	RGB highColour, lowColour;
-	double mixWeight {0.0};
-	GetColours(local, std::floor(iCount), highColour, lowColour, mixWeight, false);
-
-	//Mix Colours
-	RGBdouble result;
-	result.red = (lowColour.red * (1 - mixWeight) + highColour.red* mixWeight) / white8;
-	result.green = (lowColour.green * (1 - mixWeight) + highColour.green* mixWeight) / white8;
-	result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
+	
+	ARGBdouble result(1.0,0.5,0.5,0.5);
+	if(local->sampling) {
+		if(local->layer) {
+			//Override, use sampled layer for colours.
+			
+			double index = (std::fmod(floor(iCount), 1024) / 1024)*(local->layer->width*local->layer->height);
+			double x = std::fmod(index, local->layer->width);
+			double y = std::floor(index / local->layer->width);
+			result = sampleLayerPixel(local, x, y);
+		}
+	}
+	else {
+		//Get Colours
+		RGB highColour, lowColour;
+		double mixWeight {0.0};
+		GetColours(local, std::floor(iCount), highColour, lowColour, mixWeight, false);
+		//Mix Colours
+		result.red = (lowColour.red * (1 - mixWeight) + highColour.red* mixWeight) / white8;
+		result.green = (lowColour.green * (1 - mixWeight) + highColour.green* mixWeight) / white8;
+		result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
+	}
 
 	//Panels
 	double colour = greyColour;
 	double offSet = std::fmod(iCount, 1);
+	double blackSize = (local->special / 200)*0.8;
 	if(offSet < blackSize || offSet > 1 - blackSize) {
 		//black gutter
 		colour = 0;

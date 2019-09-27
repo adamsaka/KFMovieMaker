@@ -21,7 +21,6 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 constexpr double greyColour = 0.8; //Peak grey colour
 constexpr double curveSize = 0.1;  //size of smoothed curve
-constexpr double blackSize = 0.01; //size of black gutter at each end.
 constexpr double overshoot = 0.002; //Overshoot the top of the sin wave, gives a subtle highlight
 
 static const double internalColour = greyColour * std::sin(((curveSize + overshoot) / curveSize) * pi / 2);
@@ -39,7 +38,8 @@ inline static double RenderCommonLogSteps(const LocalSequenceData * local, A_lon
 
 	double colour = greyColour;
 	double offSet = std::fmod(iCount, 1);
-
+	double blackSize = (local->special/200)*0.8;
+	
 
 	if(offSet < blackSize || offSet > 1-blackSize) {
 		//black gutter
