@@ -43,8 +43,13 @@ inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, 
 	result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
 
 	iCount = std::fmod(iCount, 1);
-	double sinMix = std::sin(pi * (iCount));
-	//iCount = (iCount + 1) / 2; //scaled from 0.0 to 1.0;
+	double sinMix {};
+	if(local->special == 0) {
+		sinMix = std::sin(pi * (iCount));
+	}else{
+		sinMix = std::abs(std::sin(pi * (iCount)*(local->special+1)));
+
+	}
 
 	result.red *= sinMix;
 	result.green *= sinMix;
