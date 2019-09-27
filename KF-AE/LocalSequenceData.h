@@ -69,6 +69,14 @@ class LocalSequenceData {
 		double slopeAngleY {0};
 		long slopeMethod {1};
 		bool overrideMinimalDistance {false};  ///Get the full matrix, regardless of request because its needed for slopes
+		bool sampling {false};
+		PF_EffectWorld * layer {nullptr};
+		
+		//For sampling functions
+		PF_Sampling8Suite1 * sample8 {nullptr};
+		PF_Sampling16Suite1 * sample16 {nullptr};
+		PF_SamplingFloatSuite1 * sample32 {nullptr};
+		PF_InData * in_data {nullptr};
 
 		std::shared_ptr<KFBData> activeKFB {nullptr};
 		long activeFrameNumber {-1};
@@ -108,6 +116,7 @@ class LocalSequenceData {
 
 		///Check if any parameters that would invalidate the cache have changed
 		bool isCacheInvalid() {
+			if(sampling) return true;
 			return !(cache_colourDivision == colourDivision &&
 				cache_modifier == modifier &&
 				cache_method == method &&

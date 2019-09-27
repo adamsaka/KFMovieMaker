@@ -89,6 +89,24 @@ struct RGBdouble {
 	}
 };
 
+struct ARGBdouble {
+	double alpha {1.0};
+	double red {0};
+	double green {0};
+	double blue {0};
+
+	ARGBdouble() {};
+	ARGBdouble(double a, double r, double g, double b) {
+		alpha = a;
+		red = r;
+		green = g;
+		blue = b;
+	}
+	bool operator==(const ARGBdouble& rhs) {
+		return (alpha==rhs.alpha) && (red == rhs.red) && (green == rhs.green) && (blue == rhs.blue);
+	}
+};
+
 
 //Wrapper struct around an effectWorld and handle to ensure it is released.
 struct WorldHolder {

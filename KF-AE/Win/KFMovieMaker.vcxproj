@@ -354,6 +354,7 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
   <ItemGroup>
     <ClInclude Include="..\Render-Angle.h" />
     <ClInclude Include="..\Render-AngleColour.h" />
+    <ClInclude Include="..\Render-DEAndAngle.h" />
     <ClInclude Include="..\Render-KFRColouring.h" />
     <ClInclude Include="..\KFBData.h" />
     <ClInclude Include="..\KFMovieMaker.h" />
@@ -380,6 +381,7 @@ cl /D "MSWindows" /EP $(IntDir)%(Filename).rrc &gt;               "$(ProjectDir)
     <ClCompile Include="..\Render-Angle.cpp" />
     <ClCompile Include="..\Render-AngleColour.cpp" />
     <ClCompile Include="..\Render-DarkLightWave.cpp" />
+    <ClCompile Include="..\Render-DEAndAngle.cpp" />
     <ClCompile Include="..\Render-KFRColouring.cpp" />
     <ClCompile Include="..\Render-KFRDistance.cpp" />
     <ClCompile Include="..\Render-LogStepPalette.cpp" />

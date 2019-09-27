@@ -32,7 +32,6 @@ namespace fs = std::experimental::filesystem;
 Constructor
 *******************************************************************************************************/
 LocalSequenceData::LocalSequenceData()
-
 {
 }
 

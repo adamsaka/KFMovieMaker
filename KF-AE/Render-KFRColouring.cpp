@@ -16,164 +16,106 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "LocalSequenceData.h"
 #include "Render.h"
 
+inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
+	double iCount = GetBlendedPixelValue(local, x, y);
+	if(iCount >= local->activeKFB->maxIterations)  return ARGBdouble(-1,-1, -1, -1);  //Inside pixel
+
+	iCount = doModifier(local->modifier, iCount);
+	iCount /= local->colourDivision;
+	iCount += local->colourOffset;
+
+	ARGBdouble result(1.0, 0.5, 0.5, 0.5);
+	if(local->sampling) {
+		if(local->layer) {
+			//Override, use sampled layer for colours.
+			double index = (std::fmod(iCount, 1024) / 1024)*(local->layer->width*local->layer->height);
+			double x = std::fmod(index, local->layer->width);
+			double y = std::floor(index / local->layer->width);
+			result = sampleLayerPixel(local, x, y);
+		}
+
+	}
+	else {
+		//Get Colours from .kfr
+		RGB highColour, lowColour;
+		double mixWeight {0.0};
+		GetColours(local, iCount, highColour, lowColour, mixWeight, false);
+
+		//Mix Colours
+		result.red = (lowColour.red * (1 - mixWeight) + highColour.red* mixWeight) / white8;
+		result.green = (lowColour.green * (1 - mixWeight) + highColour.green* mixWeight) / white8;
+		result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
+	}
+
+
+	if(local->slopesEnabled) {
+		float distance[3][3];
+		if(local->scalingMode == 1) {
+			getDistanceIntraFrame(distance, x, y, local, true);
+		}
+		else {
+			GetBlendedDistanceMatrix(distance, local, x, y);
+		}
+
+		doSlopes(distance, local, result.red, result.green, result.blue);
+	}
+	return result;
+}
 
 /*******************************************************************************************************
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_KFRColouring::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	const auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	//Get iteration value
-	double iCount = GetBlendedPixelValue(local, x, y);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour8(local, out);
 
-	//Check for inside pixel
-	if(iCount >= local->activeKFB->maxIterations)  return SetInsideColour8(local,out);
-	
-	
-	iCount = doModifier(local->modifier, iCount);
-	
-	iCount /= local->colourDivision;
-	iCount += local->colourOffset;
-	
-	//Get Colours
-	RGB highColour, lowColour;
-	double mixWeight {0.0};
-	GetColours(local, iCount, highColour, lowColour, mixWeight);
 
-	//Mix Colours
-	double r = lowColour.red * (1-mixWeight) + highColour.red* mixWeight;
-	double g = lowColour.green * (1 - mixWeight) + highColour.green* mixWeight;
-	double b = lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight;
-	
-	if(local->slopesEnabled) {
-		float distance[3][3];
-		if(local->scalingMode == 1) {
-			getDistanceIntraFrame(distance, x, y, local,true);
-		}
-		else {
-			GetBlendedDistanceMatrix(distance, local, x, y);
-		}
-		r /= 255.0;
-		g /= 255.0;
-		b /= 255.0;
-		doSlopes(distance, local, r, g, b);
-		r *= white8;
-		g *= white8;
-		b *= white8;
-	}
-
+	out->red = roundTo8Bit(colour.red * white8);
+	out->green = roundTo8Bit(colour.green * white8);
+	out->blue = roundTo8Bit(colour.blue * white8);
 	out->alpha = white8;
-	out->red = roundTo8Bit(r);
-	out->green = roundTo8Bit(g);
-	out->blue = roundTo8Bit(b);
+
 	return PF_Err_NONE;
-	
+
 }
 
 /*******************************************************************************************************
-Render a pixel at 16-bit colour depth
+Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_KFRColouring::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	constexpr double colourScale = static_cast<double>(white16) / static_cast<double>(white8);
-	const auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	//Get iteration value
-	double iCount = GetBlendedPixelValue(local, x, y);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour16(local, out);
 
-	//Check for inside pixel
-	if(iCount >= local->activeKFB->maxIterations) return SetInsideColour16(local, out);
-
-	iCount = doModifier(local->modifier, iCount);
-	iCount /= local->colourDivision;
-	iCount += local->colourOffset;
-
-	//Get Colours
-	RGB highColour, lowColour;
-	double mixWeight {0.0};
-	GetColours(local, iCount, highColour, lowColour, mixWeight);
-
-	//Mix Colours
-	
-	double r = lowColour.red * (1 - mixWeight) + highColour.red * mixWeight;
-	double g = lowColour.green* (1 - mixWeight) + highColour.green  * mixWeight;
-	double b = lowColour.blue * (1 - mixWeight) + highColour.blue  *mixWeight;
-
-	if(local->slopesEnabled) {
-		float distance[3][3];
-		if(local->scalingMode == 1) {
-			getDistanceIntraFrame(distance, x, y, local, true);
-		}
-		else {
-			GetBlendedDistanceMatrix(distance, local, x, y);
-		}
-		r /= 255.0;
-		g /= 255.0;
-		b /= 255.0;
-		doSlopes(distance, local, r, g, b);
-		r *= white16;
-		g *= white16;
-		b *= white16;
-	}
-	else {
-		r *= colourScale;
-		g *= colourScale;
-		b *= colourScale;
-	}
-
-
+	out->red = roundTo16Bit(colour.red * white16);
+	out->green = roundTo16Bit(colour.green * white16);
+	out->blue = roundTo16Bit(colour.blue * white16);
 	out->alpha = white16;
-	out->red = roundTo16Bit(r);
-	out->green = roundTo16Bit(g);
-	out->blue = roundTo16Bit(b);
 	return PF_Err_NONE;
+
 }
 
 /*******************************************************************************************************
-Render a pixel at 32-bit colour depth
+Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
-PF_Err Render_KFRColouring::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * in, PF_Pixel32 * out) {
-	constexpr double colourScale = static_cast<double>(white32) / static_cast<double>(white8);
-	const auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+PF_Err Render_KFRColouring::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
+	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
 
-	//Get iteration value
-	double iCount = GetBlendedPixelValue(local, x, y);
+	auto colour = RenderCommon(local, x, y);
+	if(colour.red == -1) SetInsideColour32(local, out);
 
-	//Check for inside pixel
-	if(iCount >= local->activeKFB->maxIterations) return SetInsideColour32(local, out);
 
-	iCount = doModifier(local->modifier, iCount);
-	iCount /= local->colourDivision;
-	iCount += local->colourOffset;
+	if(colour.red < 0.0) colour.red = 0.0; //Negative values causing rendering issues
+	if(colour.green < 0.0) colour.green = 0.0;
+	if(colour.blue < 0.0) colour.blue = 0.0;
 
-	//Get Colours
-	RGB highColour, lowColour;
-	double mixWeight {0.0};
-	GetColours(local, iCount, highColour, lowColour, mixWeight);
-
-	//Mix Colours
-	double r = lowColour.red * colourScale * (1 - mixWeight) + highColour.red * colourScale* mixWeight;
-	double g = lowColour.green * colourScale * (1 - mixWeight) + highColour.green * colourScale * mixWeight;
-	double b = lowColour.blue * colourScale * (1 - mixWeight) + highColour.blue * colourScale *mixWeight;
-
-	if(local->slopesEnabled) {
-		float distance[3][3];
-		if(local->scalingMode == 1) {
-			getDistanceIntraFrame(distance, x, y, local, true);
-		}
-		else {
-			GetBlendedDistanceMatrix(distance, local, x, y);
-		}
-		
-		doSlopes(distance, local, r, g, b);
-		
-	}
-	if(r < 0) r = 0;
-	if(g < 0) g = 0;
-	if(b < 0) b = 0;
-
+	out->red = static_cast<float>(colour.red);
+	out->green = static_cast<float>(colour.green);
+	out->blue = static_cast<float>(colour.blue);
 	out->alpha = white32;
-	out->red = static_cast<float>(r);
-	out->green = static_cast<float>(g);
-	out->blue = static_cast<float>(b);
 	return PF_Err_NONE;
+
 }

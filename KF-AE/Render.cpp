@@ -34,6 +34,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "Render-PanelsColour.h"
 #include "Render-Angle.h"
 #include "Render-AngleColour.h"
+#include "Render-DEAndAngle.h"
 
 #include <cmath>
 
@@ -54,6 +55,14 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
 static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
 
+enum class checkoutID {
+	sampleLayer = 1
+} ;
+
+
+
+
+
 /*******************************************************************************************************
 Pre Render
 Gives AE the maximum output rectangle (always the size of the kfb).
@@ -64,12 +73,14 @@ PF_Err SmartPreRender(PF_InData *in_data, PF_OutData *out_data,  PF_PreRenderExt
 	auto sd = SequenceData::GetSequenceData(in_data);
 	if(!sd) throw ("Sequence Data invalid");
 
+	auto request = preRender->input->output_request;
+
 	if (!sd->Validate()) {
 		setMaxOuputRectangle(preRender, 0, 0, 0, 0);
 		setOuputRectangle(preRender, 0, 0, 0, 0);
 		return PF_Err_NONE;
 	}
-
+	
 	auto w = sd->getWidth();
 	auto h = sd->getHeight();
 	setMaxOuputRectangle(preRender, 0, w, 0, h);
@@ -83,7 +94,21 @@ PF_Err SmartPreRender(PF_InData *in_data, PF_OutData *out_data,  PF_PreRenderExt
 		setOuputRectangle(preRender, std::max(0, r.left), std::min(w, r.right), std::max(0, r.top), std::min(h, r.bottom));
 	}
 
-	preRender->output->solid = true;  //only until we start using alpha
+	//Manage layer sampling
+	auto sampling = readCheckBoxParam(in_data, ParameterID::samplingOn);
+	if(sampling) {
+		preRender->output->solid = false;  //layer might contain alpha
+		
+		//Checkout sampling layer
+		auto layerIndex = readLayerParamIndex(in_data, ParameterID::layerSample);
+		PF_CheckoutResult checkout_result;
+		auto err = preRender->cb->checkout_layer(in_data->effect_ref, layerIndex, static_cast<long>(checkoutID::sampleLayer), &request, in_data->current_time, in_data->time_step, in_data->time_scale, &checkout_result);
+		if(err) throw(err);
+	}else{
+		preRender->output->solid = true;  
+	}
+
+	
 	return PF_Err_NONE;
 }
 
@@ -127,6 +152,8 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 			if(local->slopeMethod == 2) local->overrideMinimalDistance = true;
 
 		}
+		local->sampling = readCheckBoxParam(in_data, ParameterID::samplingOn);
+		
 
 		//Setup data for active frame, and next frame.
 		long activeFrame = static_cast<long>(std::floor(keyFrame));
@@ -137,7 +164,30 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 		local->scaleFactorX = static_cast<float>(in_data->downsample_x.den) / static_cast<float>(in_data->downsample_x.num);
 		local->scaleFactorY = static_cast<float>(in_data->downsample_y.den) / static_cast<float>(in_data->downsample_y.num);
 		local->bitDepth = smartRender->input->bitdepth;
+		local->in_data = in_data;
 
+		
+
+		//Setup sampling if we are doing that
+		if(local->sampling) {
+			//Checkout layer. Note: check-in/memory management for layers done by AE.
+			err = smartRender->cb->checkout_layer_pixels(in_data->effect_ref, static_cast<long>(checkoutID::sampleLayer), &local->layer);
+			if(err) throw (err);
+			AEGP_SuiteHandler suites(in_data->pica_basicP);
+			switch(local->bitDepth) {
+				case 8:
+					local->sample8 = suites.Sampling8Suite1();
+					break;
+				case 16:
+					local->sample16 = suites.Sampling16Suite1();
+					break;
+				case 32:
+					local->sample32 = suites.SamplingFloatSuite1();
+					break;
+				default:
+					break;
+			}
+		}
 
 		//Checkout Output buffer
 		PF_EffectWorld* output {nullptr};
@@ -152,16 +202,32 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 			GenerateImage(in_data, smartRender, output, local);
 		}
 
+		local->layer = nullptr;
+		local->sample8 = nullptr;
+		local->sample16 = nullptr;
+		local->sample32 = nullptr;
+		local->in_data = nullptr;
 		return err;
 	}
 	catch(PF_Err &thrown_err) {
+		local->layer = nullptr;
+		local->sample8 = nullptr;
+		local->sample16 = nullptr;
+		local->sample32 = nullptr;
+		local->in_data = nullptr;
 		local->DeleteKFBData();
 		return thrown_err;
 	}
 	catch(std::exception ex) {
+		local->layer = nullptr;
+		local->sample8 = nullptr;
+		local->sample16 = nullptr;
+		local->sample32 = nullptr;
+		local->in_data = nullptr;
 		local->DeleteKFBData();
 		throw(ex);
 	}
+	
 }
 
 /*******************************************************************************************************
@@ -279,15 +345,10 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 				break;
 		}
 		local->tempImageBuffer.bitDepth = smartRender->input->bitdepth;
+		err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(local->tempImageBuffer.handle, &local->tempImageBuffer.effectWorld);
+		if(err) throw (err);
 	}
-	else {
-	
-	}
-	
-	
-	err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(local->tempImageBuffer.handle, &local->tempImageBuffer.effectWorld);
-	if(err) throw (err);
-	
+		
 
 	PF_LRect rectOut {0, 0, width, height};
 	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
@@ -404,6 +465,8 @@ inline PixelFunction8 selectPixelRenderFunction8(long method) {
 			return Render_Angle::Render8;
 		case 11:
 			return Render_AngleColour::Render8;
+		case 12:
+			return Render_DEAndAngle::Render8;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -435,6 +498,8 @@ inline PixelFunction16 selectPixelRenderFunction16(long method) {
 			return Render_Angle::Render16;
 		case 11:
 			return Render_AngleColour::Render16;
+		case 12:
+			return Render_DEAndAngle::Render16;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -466,6 +531,8 @@ inline PixelFunction32 selectPixelRenderFunction32(long method) {
 			return Render_Angle::Render32;
 		case 11:
 			return Render_AngleColour::Render32;
+		case 12:
+			return Render_DEAndAngle::Render32;
 		default:
 			throw(std::exception("Unknown rendering method"));
 	}
@@ -739,6 +806,53 @@ void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequence
 	bool min = minimal && !local->overrideMinimalDistance;
 	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step, min);
 }
+
+/*******************************************************************************************************
+
+
+*******************************************************************************************************/
+ARGBdouble sampleLayerPixel(const LocalSequenceData * local, double x, double y) {
+	ARGBdouble result(1.0,0.5,0.5,0.5); //Default to grey
+	auto layer = local->layer;
+	if(!layer) return result;
+	if(layer->width == 0 || layer->height == 0) return result;
+
+	if(x < 0) x = 0;
+	if(y < 0)y = 0;
+	if(x > layer->width) x = layer->width;
+	if(y > layer->height) y = layer->height;
+	PF_Fixed xF = static_cast<PF_Fixed>(x * 65536);
+	PF_Fixed yF = static_cast<PF_Fixed>(y * 65536);
+
+	
+	
+	PF_SampPB sampPB {};
+	sampPB.src = layer;
+	switch(local->bitDepth) {
+		case 8:
+			{
+				PF_Pixel pixel {};
+				local->sample8->subpixel_sample(local->in_data->effect_ref, xF, yF, &sampPB, &pixel);
+				result.alpha = static_cast<double>(pixel.alpha) / white8;
+				result.red = static_cast<double>(pixel.red) / white8;
+				result.green = static_cast<double>(pixel.green) / white8;
+				result.blue = static_cast<double>(pixel.blue) / white8;
+				break;
+			}
+
+		case 16:
+			break;
+		case 32:
+			break;
+		default:
+			break;
+	}
+	
+
+	return result;
+}
+
+
 
 /*******************************************************************************************************
 Render (non smart)

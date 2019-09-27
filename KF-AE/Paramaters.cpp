@@ -43,6 +43,7 @@ static void AddGroupStart(ParameterID id, const char * name, PF_ParamFlags flags
 static void AddGroupEnd(ParameterID id);
 static void AddColourPicker(ParameterID id, const char * name, unsigned char red = 0, unsigned char green = 0, unsigned char blue = 0, PF_ParamFlags flags = 0);
 static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFlags flags=0);
+static void AddLayer(ParameterID id, const char * name, PF_ParamFlags flags = 0);
 inline long useParam(ParameterID p);
 
 /*******************************************************************************************************
@@ -59,13 +60,15 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddSlider(ParameterID::keyFrameNumber, "Key Frame", 0, 9999999 ,0, 1, 0, PF_Precision_TEN_THOUSANDTHS);
 	AddDropDown(ParameterID::scalingMode, "Render Method", "Use Cached Frames|Frame by Frame", 1, PF_ParamFlag_CANNOT_TIME_VARY);
 	AddGroupStart(ParameterID::topic_start_colour, "Colours (Outside)");
-	AddDropDown(ParameterID::colourMethod, "Colour Method", "Standard (.kfr Colours)|Distance Estimation (.kfr Colours)|(-|Sin Wave Greyscale|Sin Wave Colour|Log Steps Greyscale|Log Steps Colour|Panels Greyscale|Panels Colour|Angle Greyscale|Angle Colour",1, PF_ParamFlag_CANNOT_TIME_VARY );
+	AddDropDown(ParameterID::colourMethod, "Colour Method", "Standard (.kfr Colours)|Distance Estimation (.kfr Colours)|(-|Sin Wave Greyscale|Sin Wave Colour|Log Steps Greyscale|Log Steps Colour|Panels Greyscale|Panels Colour|Angle Greyscale|Angle Colour|DE and Angle (Sampled)",1, PF_ParamFlag_CANNOT_TIME_VARY );
 	AddDropDown(ParameterID::modifier, "Modifier", "Linear|Square Root|Cubic Root|Logarithm", 1);
 	AddSlider(ParameterID::colourDivision, "Iteration Division", 0, 1024,0, 1024, 1, PF_Precision_TEN_THOUSANDTHS);
 	AddCheckBox(ParameterID::smooth, "Smooth Colouring", "", true);
 	AddSlider(ParameterID::colourOffset, "Colour Offset", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
 	AddSlider(ParameterID::distanceClamp, "Distance Clamp", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
 	AddAngle(ParameterID::colourCycle, "Colour Cycle", 0);
+	AddCheckBox(ParameterID::samplingOn, "Use Layer Sampling", "", false);
+	AddLayer(ParameterID::layerSample, "Layer to Sample");
 	AddGroupEnd(ParameterID::topic_start_colour);
 	AddGroupStart(ParameterID::topic_start_insideColour, "Colours (Inside)");
 	AddColourPicker(ParameterID::insideColour, "Inside Colour");
@@ -291,6 +294,21 @@ static void AddAngle(ParameterID id, const char * name, short value, PF_ParamFla
 }
 
 /*******************************************************************************************************
+Adds an "Layer" parameter (only to be called during ParamaterSetup event)
+*******************************************************************************************************/
+static void AddLayer(ParameterID id, const char * name, PF_ParamFlags flags) {
+	PF_ParamDef	def {};	//Must be zero initialised.
+	def.param_type = PF_Param_LAYER;
+	strncpy_s(def.name, name, sizeof(def.name));
+	def.uu.id = static_cast<long>(id);
+	def.flags = flags;
+	auto err = globalTL_in_data->inter.add_param(globalTL_in_data->effect_ref, -1, &def);
+	if(err) throw(err);
+	useParam(id);
+	return;
+}
+
+/*******************************************************************************************************
 Reads the value an angle paramter (in degrees).
 Internally AE uses fixed-point for this parameter, this function converts it to a double.
 Note: May be multple of 360
@@ -365,5 +383,20 @@ RGB readColourParam(PF_InData *in_data, ParameterID paramID) {
 	value.blue = param.u.cd.value.blue;
 	in_data->inter.checkin_param(in_data->effect_ref, &param);
 	return value;
+}
+
+/*******************************************************************************************************
+Reads the index of a layer
+Uses check-in/check-out, so this is ok to use during a smart-render call. 
+(The actual layer should also be checked out, this only gets the index)
+*******************************************************************************************************/
+long readLayerParamIndex(PF_InData *in_data, ParameterID paramID) {
+	auto parameterLocation = paramTranslate[static_cast<int> (paramID)];
+	if(parameterLocation == 0) throw ("Invalid request in readLayerParam");
+	/*PF_ParamDef param {};
+	in_data->inter.checkout_param(in_data->effect_ref, parameterLocation, in_data->current_time, in_data->time_step, in_data->time_scale, &param);
+	long value = param.u.ld.;
+	in_data->inter.checkin_param(in_data->effect_ref, &param);*/
+	return parameterLocation;
 }
 

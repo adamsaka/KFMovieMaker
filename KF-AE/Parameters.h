@@ -42,6 +42,8 @@ enum class ParameterID : long {
 	slopeAngle,
 	colourCycle,
 	slopeMethod,
+	layerSample,
+	samplingOn,
 	__last,  //Must be last (used for array memory allocation)
 };
 
@@ -52,4 +54,5 @@ double readFloatSliderParam(PF_InData * in_data, ParameterID parameterNumber);
 long readListParam(PF_InData * in_data, ParameterID parameterNumber);
 bool readCheckBoxParam(PF_InData * in_data, ParameterID parameterNumber);
 RGB readColourParam(PF_InData * in_data, ParameterID paramID);
+long readLayerParamIndex(PF_InData * in_data, ParameterID paramID);
 double readAngleParam(PF_InData * in_data, ParameterID paramID);
