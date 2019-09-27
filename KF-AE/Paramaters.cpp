@@ -67,6 +67,7 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddSlider(ParameterID::colourOffset, "Colour Offset", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
 	AddSlider(ParameterID::distanceClamp, "Distance Clamp", 0, 1024, 0, 1024, 0, PF_Precision_TENTHS);
 	AddAngle(ParameterID::colourCycle, "Colour Cycle", 0);
+	AddSlider(ParameterID::special, "Special", 0, 100, 0, 100, 0, PF_Precision_TENTHS);
 	AddCheckBox(ParameterID::samplingOn, "Use Layer Sampling", "", false);
 	AddLayer(ParameterID::layerSample, "Layer to Sample");
 	AddGroupEnd(ParameterID::topic_start_colour);

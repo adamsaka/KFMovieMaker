@@ -153,6 +153,7 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 
 		}
 		local->sampling = readCheckBoxParam(in_data, ParameterID::samplingOn);
+		local->special = readFloatSliderParam(in_data, ParameterID::special);
 		
 
 		//Setup data for active frame, and next frame.
@@ -173,6 +174,8 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 			//Checkout layer. Note: check-in/memory management for layers done by AE.
 			err = smartRender->cb->checkout_layer_pixels(in_data->effect_ref, static_cast<long>(checkoutID::sampleLayer), &local->layer);
 			if(err) throw (err);
+
+
 			AEGP_SuiteHandler suites(in_data->pica_basicP);
 			switch(local->bitDepth) {
 				case 8:

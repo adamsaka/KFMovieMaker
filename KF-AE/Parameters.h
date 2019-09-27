@@ -44,6 +44,7 @@ enum class ParameterID : long {
 	slopeMethod,
 	layerSample,
 	samplingOn,
+	special,
 	__last,  //Must be last (used for array memory allocation)
 };
 

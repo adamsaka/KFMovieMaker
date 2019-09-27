@@ -71,6 +71,7 @@ class LocalSequenceData {
 		bool overrideMinimalDistance {false};  ///Get the full matrix, regardless of request because its needed for slopes
 		bool sampling {false};
 		PF_EffectWorld * layer {nullptr};
+		double special {0};
 		
 		//For sampling functions
 		PF_Sampling8Suite1 * sample8 {nullptr};
@@ -112,26 +113,30 @@ class LocalSequenceData {
 			cache_slopeStrength = slopeStrength;
 			cache_slopeAngle = slopeAngle;
 			cache_slopeMethod = slopeMethod;
+			cache_sampling = sampling;
+			cache_special = special;
 		};
 
 		///Check if any parameters that would invalidate the cache have changed
 		bool isCacheInvalid() {
 			if(sampling) return true;
 			return !(cache_colourDivision == colourDivision &&
-				cache_modifier == modifier &&
-				cache_method == method &&
-				cache_useSmooth == useSmooth &&
-				cache_scaleFactorX == scaleFactorX &&
-				cache_scaleFactorY == scaleFactorY && 
-				cache_bitDepth == bitDepth &&
-				cache_insideColour == insideColour &&
-				cache_colourOffset == colourOffset &&
-				cache_distanceClamp == distanceClamp &&
-				cache_slopesEnabled == slopesEnabled &&
-				cache_slopeShadowDepth == slopeShadowDepth &&
-				cache_slopeStrength == slopeStrength &&
-				cache_slopeAngle == slopeAngle &&
-				cache_slopeMethod == slopeMethod
+					 cache_modifier == modifier &&
+					 cache_method == method &&
+					 cache_useSmooth == useSmooth &&
+					 cache_scaleFactorX == scaleFactorX &&
+					 cache_scaleFactorY == scaleFactorY &&
+					 cache_bitDepth == bitDepth &&
+					 cache_insideColour == insideColour &&
+					 cache_colourOffset == colourOffset &&
+					 cache_distanceClamp == distanceClamp &&
+					 cache_slopesEnabled == slopesEnabled &&
+					 cache_slopeShadowDepth == slopeShadowDepth &&
+					 cache_slopeStrength == slopeStrength &&
+					 cache_slopeAngle == slopeAngle &&
+					 cache_slopeMethod == slopeMethod &&
+					 cache_sampling == sampling &&
+					 cache_special == special
 					
 				);
 		}
@@ -153,6 +158,8 @@ private:
 		double cache_slopeStrength {0};
 		double cache_slopeAngle {0};
 		long cache_slopeMethod {1};
+		bool cache_sampling {false};
+		double cache_special {0};
 
 		void clear();
 		void getKFBlist();
