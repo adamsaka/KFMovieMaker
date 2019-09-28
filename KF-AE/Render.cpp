@@ -844,8 +844,26 @@ ARGBdouble sampleLayerPixel(const LocalSequenceData * local, double x, double y)
 			}
 
 		case 16:
+			{
+				PF_Pixel16 pixel {};
+				local->sample16->subpixel_sample16(local->in_data->effect_ref, xF, yF, &sampPB, &pixel);
+				result.alpha = static_cast<double>(pixel.alpha) / white16;
+				result.red = static_cast<double>(pixel.red) / white16;
+				result.green = static_cast<double>(pixel.green) / white16;
+				result.blue = static_cast<double>(pixel.blue) / white16;
+				break;
+			}
 			break;
 		case 32:
+			{
+				PF_Pixel32 pixel {};
+				local->sample32->subpixel_sample_float(local->in_data->effect_ref, xF, yF, &sampPB, &pixel);
+				result.alpha = static_cast<double>(pixel.alpha) ;
+				result.red = static_cast<double>(pixel.red);
+				result.green = static_cast<double>(pixel.green);
+				result.blue = static_cast<double>(pixel.blue) ;
+				break;
+			}
 			break;
 		default:
 			break;

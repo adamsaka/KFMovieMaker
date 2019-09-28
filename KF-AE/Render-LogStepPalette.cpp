@@ -42,6 +42,10 @@ inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, 
 	result.green = (lowColour.green * (1 - mixWeight) + highColour.green* mixWeight) / white8;
 	result.blue = (lowColour.blue * (1 - mixWeight) + highColour.blue *mixWeight) / white8;
 
+	if(local->special > 0) {
+		iCount *= (local->special + 1);
+	}
+
 	iCount = 1-std::fmod(iCount, 1);
 	iCount = std::log((iCount * logScale) + 1);
 	iCount = (iCount) / std::log(logScale + 1); //scaled from 0.0 to 1.0;

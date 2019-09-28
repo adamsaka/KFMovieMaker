@@ -42,7 +42,6 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 	if(local->sampling) {
 		if(local->layer) {
 			//Override, use sampled layer for colours.
-			
 			double index = (std::fmod(floor(iCount), 1024) / 1024)*(local->layer->width*local->layer->height);
 			double x = std::fmod(index, local->layer->width);
 			double y = std::floor(index / local->layer->width);
