@@ -20,8 +20,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #include "KFMovieMaker.h"
 
 #include <atomic>
-#include <experimental\filesystem>
-namespace fs = std::experimental::filesystem;
+#include <filesystem>
+namespace fs = std::filesystem;
 
 
 //Because sequence data needs to be flat we use a fixed length string to hold filnames
