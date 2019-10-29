@@ -57,7 +57,7 @@ inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, 
 	
 
 	if(local->slopesEnabled) {
-		float distance[3][3];
+		double distance[3][3];
 		if(local->scalingMode == 1) {
 			getDistanceIntraFrame(distance, x, y, local, true);
 		}

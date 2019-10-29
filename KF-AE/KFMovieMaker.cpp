@@ -57,7 +57,7 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData	*in_data, PF_OutData *out_data, PF_Param
 			err = ParameterSetup(in_data, out_data, params, output);
 			break;
 		case PF_Cmd_USER_CHANGED_PARAM:
-			err = ParameterChanged(in_data, out_data, params, reinterpret_cast<const PF_UserChangedParamExtra *>(extra));
+			err = ParameterChanged(in_data, out_data, params, static_cast<const PF_UserChangedParamExtra *>(extra));
 			break;
 		
 		case PF_Cmd_SEQUENCE_SETUP:
@@ -82,11 +82,11 @@ PF_Err EffectMain(PF_Cmd cmd, PF_InData	*in_data, PF_OutData *out_data, PF_Param
 			break;
 		
 		case PF_Cmd_SMART_PRE_RENDER:
-			err = SmartPreRender(in_data, out_data,  reinterpret_cast<PF_PreRenderExtra*>(extra));
+			err = SmartPreRender(in_data, out_data,  static_cast<PF_PreRenderExtra*>(extra));
 			break;
 		
 		case PF_Cmd_SMART_RENDER:
-			err = SmartRender(in_data, out_data, reinterpret_cast<PF_SmartRenderExtra*>(extra));
+			err = SmartRender(in_data, out_data, static_cast<PF_SmartRenderExtra*>(extra));
 			break;
 		}
 	}

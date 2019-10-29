@@ -72,6 +72,7 @@ class LocalSequenceData {
 		bool sampling {false};
 		PF_EffectWorld * layer {nullptr};
 		double special {0};
+		bool mercator{ false };
 		
 		//For sampling functions
 		PF_Sampling8Suite1 * sample8 {nullptr};
@@ -88,7 +89,8 @@ class LocalSequenceData {
 		double nextZoomScale {2};
 		
 		WorldHolder tempImageBuffer;
-
+		PF_EffectWorld * mercatorInput{ nullptr }; //Mercator input image
+		PF_EffectWorld* mercatorOutput{ nullptr }; //Mercator input image
 
 		LocalSequenceData();
 
@@ -160,6 +162,7 @@ private:
 		long cache_slopeMethod {1};
 		bool cache_sampling {false};
 		double cache_special {0};
+		
 
 		void clear();
 		void getKFBlist();

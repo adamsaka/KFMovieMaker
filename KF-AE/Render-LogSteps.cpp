@@ -37,7 +37,7 @@ inline static double RenderCommonLogSteps(const LocalSequenceData * local, A_lon
 	iCount = (iCount)  / std::log(logScale+1); //scaled from 0.0 to 1.0;
 
 	if(local->slopesEnabled) {
-		float distance[3][3];
+		double distance[3][3];
 		if(local->scalingMode == 1) {
 			getDistanceIntraFrame(distance, x, y, local, true);
 		}
@@ -55,7 +55,7 @@ inline static double RenderCommonLogSteps(const LocalSequenceData * local, A_lon
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogSteps::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	double colour = RenderCommonLogSteps(local, x, y);
 	if(colour == -1) SetInsideColour8(local, out);
@@ -74,7 +74,7 @@ PF_Err Render_LogSteps::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * i
 Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogSteps::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	double colour = RenderCommonLogSteps(local, x, y);
 	if(colour == -1) SetInsideColour16(local, out);
@@ -93,7 +93,7 @@ PF_Err Render_LogSteps::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 *
 Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogSteps::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	double colour = RenderCommonLogSteps(local, x, y);
 	if(colour == -1) SetInsideColour32(local, out);

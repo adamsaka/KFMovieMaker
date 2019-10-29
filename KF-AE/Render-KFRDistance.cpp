@@ -31,7 +31,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /*******************************************************************************************************
 Perform distance calculation
 *******************************************************************************************************/
-inline static double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale=true) {
+inline static double doDistance(double p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale=true) {
 	
 	//Traditional
 	double gx = (p[0][1] - p[1][1]) ;
@@ -50,7 +50,7 @@ inline static double doDistance(float p[][3], A_long x, A_long y, const LocalSeq
 The initial render calculations, common to all bit depths.
 *******************************************************************************************************/
 inline ARGBdouble RenderCommon(const LocalSequenceData * local,  A_long x, A_long y) {
-	float distance[3][3];
+	double distance[3][3];
 
 	//Get iteration value
 	double iCount = GetBlendedPixelValue(local, x, y);
@@ -116,7 +116,7 @@ inline ARGBdouble RenderCommon(const LocalSequenceData * local,  A_long x, A_lon
 Distance Estimation 8bpc
 *******************************************************************************************************/
 PF_Err Render_KFRDistance::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour8(local, out);
@@ -132,7 +132,7 @@ PF_Err Render_KFRDistance::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 
 Distance Estimation 16bpc
 *******************************************************************************************************/
 PF_Err Render_KFRDistance::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour16(local, out);
@@ -148,7 +148,7 @@ PF_Err Render_KFRDistance::Render16(void * refcon, A_long x, A_long y, PF_Pixel1
 Distance Estimation 32bpc
 *******************************************************************************************************/
 PF_Err Render_KFRDistance::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * in, PF_Pixel32 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour32(local, out);

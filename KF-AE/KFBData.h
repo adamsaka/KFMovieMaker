@@ -43,7 +43,7 @@ class KFBData {
 	private:
 		PF_Handle handle				{nullptr};		//AE memory handle
 		int * data						{nullptr};		//The actual iteration data
-		float * smoothData				{nullptr};		//Float containing offsets for smooth shading
+		double * smoothData				{nullptr};		//double containing offsets for smooth shading
 		
 		long memSize					{0};			//Size of the data array
 		long width						{0};			//Width of kfb
@@ -58,15 +58,15 @@ class KFBData {
 		long getWidth() {return width;} 
 		long getHeight() {return height;} 
 		int * getIterationData() {return data;}
-		float * getSmoothData() {return smoothData;}
+		double * getSmoothData() {return smoothData;}
 		
 		
 		int getIterationCount(long x, long y);
 		double getIterationCountSmooth(long x, long y);
-		float calculateIterationCountBiCubic(float x, float y, bool smooth = true);
-		float calculateIterationCountBiLinear(float x, float y);
-		float calculateIterationCountBiLinearNoPad(float x, float y);
-		void getDistanceMatrix(float p[][3], float x, float y, float step, bool minimal=false);
+		double calculateIterationCountBiCubic(double x, double y, bool smooth = true);
+		double calculateIterationCountBiLinear(double x, double y);
+		double calculateIterationCountBiLinearNoPad(double x, double y);
+		void getDistanceMatrix(double p[][3], double x, double y, double step, bool minimal=false);
 		
 		
 		void DisposeOfCache();
@@ -81,7 +81,7 @@ class KFBData {
 			return  y*memWidth + x;
 		}
 
-		float smoothValue(long x, long y) {	return smoothData[y*memWidth + x];}
+		double smoothValue(long x, long y) { return smoothData[y*memWidth + x];}
 		int iterationValue(long x, long y) { return data[y*memWidth + x]; }
 		
 };

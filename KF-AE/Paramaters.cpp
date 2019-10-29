@@ -32,6 +32,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 #include <string>
 
+
+
 std::array<int, static_cast<int>(ParameterID::__last)> paramTranslate; ///To translate param ID to location
 int paramsAdded {1};  ///Counter used to track parameters as they are added.
 
@@ -81,8 +83,9 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddSlider(ParameterID::slopeStrength, "Strength", 0, 100, 0, 100, 20, PF_Precision_TENTHS);
 	AddAngle(ParameterID::slopeAngle, "Shadow Angle", 45);
 	AddGroupEnd(ParameterID::topic_end_slopes);
-
-
+	if (developMode) {
+		AddCheckBox(ParameterID::mercator, "Mercator Projection", "", false);
+	}
 	out_data->num_params = paramsAdded;
 	return err;
 }

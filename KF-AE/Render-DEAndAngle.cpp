@@ -30,7 +30,7 @@ static const double internalColour = greyColour * std::sin(((curveSize + oversho
 /*******************************************************************************************************
 Perform distance calculation
 *******************************************************************************************************/
-inline static double doDistance(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale = true) {
+inline static double doDistance(double p[][3], A_long x, A_long y, const LocalSequenceData* local, bool locationBasedScale = true) {
 
 	//Traditional
 	double gx = (p[0][1] - p[1][1]);
@@ -49,7 +49,7 @@ Rendering Code common to all bit depths
 inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
 	double iCount = GetBlendedPixelValue(local, x, y);
 	if(iCount >= local->activeKFB->maxIterations)  return ARGBdouble(-1, -1, -1, -1);  //Inside pixel
-	float distance[3][3];
+	double distance[3][3];
 
 	ARGBdouble result(1.0, 0.5, 0.5, 0.5);
 	if(local->sampling) {
@@ -61,8 +61,8 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 				GetBlendedDistanceMatrix(distance, local, x, y);
 			}
 
-			float dx = (distance[0][1] - distance[2][1]);
-			float dy = (distance[1][0] - distance[1][2]);
+			double dx = (distance[0][1] - distance[2][1]);
+			double dy = (distance[1][0] - distance[1][2]);
 
 			//For clean colouring we need to take colour from nearby pixel at stationaty points.
 			if(dx == 0 && dy == 0) {
@@ -107,7 +107,7 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_DEAndAngle::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour8(local, out);
@@ -126,7 +126,7 @@ PF_Err Render_DEAndAngle::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 *
 Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_DEAndAngle::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour16(local, out);
@@ -143,7 +143,7 @@ PF_Err Render_DEAndAngle::Render16(void * refcon, A_long x, A_long y, PF_Pixel16
 Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_DEAndAngle::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour32(local, out);

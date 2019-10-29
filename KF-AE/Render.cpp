@@ -19,6 +19,7 @@ GNU Affero General Public License for more details.
 You should have received a copy of the GNU Affero General Public License
 along with this program.  If not, see <https://www.gnu.org/licenses/>.
 ********************************************************************************************/
+
 #include "Render.h"
 #include "SequenceData.h"
 #include "LocalSequenceData.h"
@@ -54,6 +55,8 @@ static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, 
 static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
 static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
 static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
+static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld* output, LocalSequenceData* local);
+PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out);
 
 enum class checkoutID {
 	sampleLayer = 1
@@ -141,6 +144,9 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 		local->colourOffset = cycle + readFloatSliderParam(in_data, ParameterID::colourOffset);
 		local->distanceClamp = readFloatSliderParam(in_data, ParameterID::distanceClamp);
 		local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
+		if (developMode) {
+			local->mercator = readCheckBoxParam(in_data, ParameterID::mercator);
+		}
 		if(local->slopesEnabled) {
 			local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
 			local->slopeStrength = readFloatSliderParam(in_data, ParameterID::slopeStrength);
@@ -167,15 +173,15 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 		local->bitDepth = smartRender->input->bitdepth;
 		local->in_data = in_data;
 
-		
 
-		//Setup sampling if we are doing that
-		if(local->sampling) {
+		if (local->sampling) {
 			//Checkout layer. Note: check-in/memory management for layers done by AE.
 			err = smartRender->cb->checkout_layer_pixels(in_data->effect_ref, static_cast<long>(checkoutID::sampleLayer), &local->layer);
-			if(err) throw (err);
-
-
+			if (err) throw (err);
+		}
+		
+		//Setup sampling if we are doing that
+		if(local->sampling || local->mercator) {
 			AEGP_SuiteHandler suites(in_data->pica_basicP);
 			switch(local->bitDepth) {
 				case 8:
@@ -265,6 +271,7 @@ static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, 
 		case 8:
 			{
 				auto fn = selectPixelRenderFunction8(local->method);
+			    
 				auto err = suites.Iterate8Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
 				if(err) throw (err);
 				break;
@@ -322,8 +329,8 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 	double nextOpacity = local->keyFramePercent;
 	
 	constexpr double tempScale = 2.0;
-	int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
-	int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
+	const int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
+	const int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
 	
 	if(local->tempImageBuffer.handle && (local->tempImageBuffer.bitDepth != smartRender->input->bitdepth || local->tempImageBuffer.effectWorld.width != width || local->tempImageBuffer.effectWorld.height != height)) {
 		local->tempImageBuffer.Destroy();
@@ -354,17 +361,99 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 		
 
 	PF_LRect rectOut {0, 0, width, height};
-	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->activeZoomScale, tempScale, tempScale, 1.0);
+	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->activeZoomScale, 1/tempScale, 1/tempScale, 1.0);
 
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
-		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->nextZoomScale, tempScale, tempScale, nextOpacity);
+		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->nextZoomScale, 1/tempScale, 1/tempScale, nextOpacity);
 
 	}
 	double scaleAdjust = 1 + (1 / local->width) * 2;
-	ScaleAroundCentre(in_data, &local->tempImageBuffer.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, 1 / (tempScale), 1 / tempScale, 1.0);
-
+	if (!local->mercator) {
+		ScaleAroundCentre(in_data, &local->tempImageBuffer.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, (tempScale), tempScale, 1.0);
+	}
+	else {
+		doMercator(in_data, &local->tempImageBuffer.effectWorld, output, local);
+	}
 	return;
 	
+}
+
+PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out ) {
+	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto inWidth = local->mercatorInput->width;
+	const auto inHeight = local->mercatorInput->height;
+	const auto shortestEdge = std::min(inWidth, inHeight);
+
+	const auto outWidth = local->mercatorOutput->width;
+	const auto outHeight = local->mercatorOutput->height;
+		
+	const double ang = (static_cast<double>(x) / static_cast<double>(outWidth)) * 2.0 * pi;
+	constexpr double radSize = 0.4;
+	double rad = (static_cast<double>(y) / static_cast<double>(outHeight)) ;  
+	rad = std::exp(-std::log(2.0f) * (1-rad));
+	 
+	rad = rad * static_cast<double>(shortestEdge * radSize) + static_cast<double>(shortestEdge * (0.5 - radSize));
+
+	/*double percentX = (distanceToEdgeX / static_cast<double>(local->width / 4));
+	double percentY = (distanceToEdgeY / static_cast<double>(local->height / 4));
+	double percent = std::min(percentX, percentY);
+	step = std::exp(-std::log(2.0f)*percent); //Assumes zoom size 2*/
+
+
+	const double xLoc = rad * std::cos(ang) + (inWidth / 2.0);
+	const double yLoc = rad * std::sin(ang) + (inHeight /2.0);
+	
+	PF_Fixed xF = static_cast<PF_Fixed>(xLoc * 65536);
+	PF_Fixed yF = static_cast<PF_Fixed>(yLoc * 65536);
+
+	PF_SampPB sampPB{};
+	sampPB.src = local->mercatorInput;
+	PF_Pixel pixel{};
+	auto err = local->sample8->subpixel_sample(local->in_data->effect_ref, xF, yF, &sampPB, out);
+	
+	out->alpha = 255;
+	/*out->red = 255;
+	out->blue = 0;
+	out->green = 0;*/
+	return err;
+}
+
+/*******************************************************************************************************
+Perform a mercator projection copy from input to output. (scaleFactor indicates size difference between input and output.)
+*******************************************************************************************************/
+static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld* output,  LocalSequenceData* local) {
+	AEGP_SuiteHandler suites(in_data->pica_basicP);
+	local->mercatorInput = input;
+	local->mercatorOutput = output;
+
+	switch (local->bitDepth) {
+	case 8:
+	{
+		auto fn = reinterpret_cast<PixelFunction8>(&Mercator8);
+		auto err = suites.Iterate8Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+		if (err) throw (err);
+		break;
+	}
+	case 16:
+	{
+		/*auto fn = selectPixelRenderFunction16(local->method);
+		auto err = suites.Iterate16Suite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+		if (err) throw (err);
+		break;*/
+	}
+	case 32:
+	{
+		/*auto fn = selectPixelRenderFunction32(local->method);
+		auto err = suites.IterateFloatSuite1()->iterate(in_data, 0, output->height, nullptr, nullptr, (void*)local, fn, output);
+		if (err) throw (err);
+		break;*/
+	}
+	default:
+		break;
+	}
+	local->mercatorInput = nullptr;
+	local->mercatorOutput = nullptr;
+
 }
 
 /*******************************************************************************************************
@@ -374,8 +463,8 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	AEFX_CLR_STRUCT(kfb->cachedImage);
-	int width = static_cast<int>(kfb->getWidth() / local->scaleFactorX);
-	int height = static_cast<int>(kfb->getHeight() / local->scaleFactorY);
+	const int width = static_cast<int>(kfb->getWidth() / local->scaleFactorX);
+	const int height = static_cast<int>(kfb->getHeight() / local->scaleFactorY);
 	
 	//Create a new "world" (aka, an image buffer).
 	switch(smartRender->input->bitdepth) {
@@ -399,9 +488,9 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	if(err) throw(err);
 
 	//Adjust zoom scales, because we don't want a zoomed image, then call GenerateImage
-	auto backup1 = local->keyFramePercent;
-	auto backup2 = local->activeZoomScale;
-	auto backup3 = local->nextZoomScale;
+	const auto backup1 = local->keyFramePercent;
+	const auto backup2 = local->activeZoomScale;
+	const auto backup3 = local->nextZoomScale;
 	local->keyFramePercent = 0;
 	local->activeZoomScale = 1;
 	local->nextZoomScale = 0;
@@ -680,11 +769,11 @@ Adds slopes colour calculations to r,g,b
 r,g,b are colour values from 0.0 to 1.0
 p[x][y] is a maxtrix of itaration values around point p[1][1] (may be a minimal cross)
 *******************************************************************************************************/
-void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g, double& b) {
+void doSlopes(double p[][3], const LocalSequenceData* local, double& r, double& g, double& b) {
 	if(local->slopeMethod == 1) {
 		//Standard (like KF)
-		float diffx = (p[0][1] - p[2][1]) / 2.0f;
-		float diffy = (p[1][0] - p[1][2]) / 2.0f;
+		double diffx = (p[0][1] - p[2][1]) / 2.0f;
+		double diffy = (p[1][0] - p[1][2]) / 2.0f;
 		double diff = diffx*local->slopeAngleX + diffy*local->slopeAngleY;
 
 		double p1 = fmax(1, p[1][1]);
@@ -711,8 +800,8 @@ void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g
 	}
 	else if(local->slopeMethod == 2) {
 		//Angle Only
-		float dx = (p[0][1] - p[2][1]);
-		float dy = (p[1][0] - p[1][2]);
+		double dx = (p[0][1] - p[2][1]);
+		double dy = (p[1][0] - p[1][2]);
 
 		//For clean colouring we need to take colour from nearby pixel at stationaty points.
 		if(dx == 0 && dy == 0) {
@@ -726,7 +815,7 @@ void doSlopes(float p[][3], const LocalSequenceData* local, double& r, double& g
 			}
 		}
 
-		double angle = std::atan2(dy, dx) + pi;
+		double angle = std::atan2(dy*16, dx*16) + pi;
 		angle += (local->slopeAngle / 360.0) *2*pi;
 		double colour = (std::sin(angle) + 1) / 2;
 		
@@ -748,7 +837,7 @@ The value is calculated by blending .kfbs
 For use in frame-by-frame (not suitable for cached images). 
 No intra-frame complensation, so will create the pulsating look.
 *******************************************************************************************************/
-void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
+void GetBlendedDistanceMatrix(double matrix[][3], const LocalSequenceData* local, A_long x, A_long y) {
 	const double halfWidth = static_cast<double>(local->width) / 2.0;
 	const double halfHeight = static_cast<double>(local->height) / 2.0;
 	const double xCentre = (x * local->scaleFactorX) - halfWidth;
@@ -756,7 +845,7 @@ void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local,
 	double xLocation = xCentre / local->activeZoomScale + halfWidth;
 	double yLocation = yCentre / local->activeZoomScale + halfHeight;
 
-	local->activeKFB->getDistanceMatrix(matrix, static_cast<float>(xLocation), static_cast<float>(yLocation), 1 / static_cast<float>(local->activeZoomScale));
+	local->activeKFB->getDistanceMatrix(matrix, static_cast<double>(xLocation), static_cast<double>(yLocation), 1 / static_cast<double>(local->activeZoomScale));
 
 	if(local->nextFrameKFB && local->keyFramePercent > 0.01 && local->nextZoomScale > 0) {
 		xLocation = xCentre / local->nextZoomScale + halfWidth;
@@ -764,8 +853,8 @@ void GetBlendedDistanceMatrix(float matrix[][3], const LocalSequenceData* local,
 		bool nextInBounds = (xLocation >= 1 && yLocation >= 1 && xLocation <= local->width - 2 && yLocation <= local->height - 2);
 
 		if(nextInBounds) {
-			float next[3][3];
-			local->nextFrameKFB->getDistanceMatrix(next, static_cast<float>(xLocation), static_cast<float>(yLocation), 1 / static_cast<float>(local->nextZoomScale));
+			double next[3][3];
+			local->nextFrameKFB->getDistanceMatrix(next, static_cast<double>(xLocation), static_cast<double>(yLocation), 1 / local->nextZoomScale);
 			const float mixWeight = static_cast<float>(local->keyFramePercent);
 			for(int i = 0; i < 3; i++) for(int j = 0; j < 3; j++) {
 				matrix[i][j] = (1 - mixWeight) * matrix[i][j] + next[i][j] * mixWeight;
@@ -781,8 +870,8 @@ It interpolate over smaller distances near the centre of the image
 
 minmal (default=false) will only fill a cross (unless overidden in local)
 *******************************************************************************************************/
-void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequenceData* local, bool minimal) {
-	float step = 0.5;
+void getDistanceIntraFrame(double p[][3], A_long x, A_long y, const LocalSequenceData* local, bool minimal) {
+	double step = 0.5;
 
 	//Calculate pixel location.
 	double halfWidth = static_cast<double>(local->width) / 2.0f;
@@ -791,24 +880,26 @@ void getDistanceIntraFrame(float p[][3], A_long x, A_long y, const LocalSequence
 	double yCentre = (y * local->scaleFactorY) - halfHeight;
 	double xLocation = xCentre / local->activeZoomScale + halfWidth;
 	double yLocation = yCentre / local->activeZoomScale + halfHeight;
-	float xf = static_cast<float>(xLocation);
-	float yf = static_cast<float>(yLocation);
+	double xf = static_cast<double>(xLocation);
+	double yf = static_cast<double>(yLocation);
 
-	float adjustX = xf / static_cast<float>(local->scaleFactorX);
-	float adjustY = yf / static_cast<float>(local->scaleFactorY);
+	double adjustX = xf / static_cast<double>(local->scaleFactorX);
+	double adjustY = yf / static_cast<double>(local->scaleFactorY);
 
-	float distanceToEdgeX = std::min(xf, local->width - xf);
-	float distanceToEdgeY = std::min(yf, local->height - yf);
-	float distanceToEdge = std::min(distanceToEdgeX, distanceToEdgeY);
+	double distanceToEdgeX = std::min(xf, local->width - xf);
+	double distanceToEdgeY = std::min(yf, local->height - yf);
+	double distanceToEdge = std::min(distanceToEdgeX, distanceToEdgeY);
 
-	float percentX = (distanceToEdgeX / static_cast<float>(local->width / 4));
-	float percentY = (distanceToEdgeY / static_cast<float>(local->height / 4));
-	float percent = std::min(percentX, percentY);
+	double percentX = (distanceToEdgeX / static_cast<double>(local->width / 4));
+	double percentY = (distanceToEdgeY / static_cast<double>(local->height / 4));
+	double percent = std::min(percentX, percentY);
 	step = std::exp(-std::log(2.0f)*percent); //Assumes zoom size 2
 
 	bool min = minimal && !local->overrideMinimalDistance;
-	local->activeKFB->getDistanceMatrix(p, static_cast<float>(xLocation), static_cast<float>(yLocation), step, min);
+	local->activeKFB->getDistanceMatrix(p, static_cast<double>(xLocation), static_cast<double>(yLocation), step, min);
 }
+
+
 
 /*******************************************************************************************************
 

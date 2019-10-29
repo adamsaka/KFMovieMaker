@@ -23,7 +23,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 /*******************************************************************************************************
 Write a message to the debug stream.
 *******************************************************************************************************/
-void DebugMessage(const std::string & str){
+void DebugMessage(const std::string & str) noexcept{
 	OutputDebugString(str.c_str());
 }
 

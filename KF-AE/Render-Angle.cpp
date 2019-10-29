@@ -28,7 +28,7 @@ inline static double RenderCommon(const LocalSequenceData * local, A_long x, A_l
 	double iCount = GetBlendedPixelValue(local, x, y);
 	if(iCount >= local->activeKFB->maxIterations)  return -1;  //Inside pixel
 
-	float distance[3][3];
+	double distance[3][3];
 	if(local->scalingMode == 1) {
 		getDistanceIntraFrame(distance, x, y, local);
 	}
@@ -36,8 +36,8 @@ inline static double RenderCommon(const LocalSequenceData * local, A_long x, A_l
 		GetBlendedDistanceMatrix(distance, local, x, y);
 	}
 	
-	float dx = (distance[0][1] - distance[2][1]) ;
-	float dy = (distance[1][0] - distance[1][2]);
+	double dx = (distance[0][1] - distance[2][1]) ;
+	double dy = (distance[1][0] - distance[1][2]);
 	
 	//For clean colouring we need to take colour from nearby pixel at stationaty points.
 	if(dx == 0 && dy == 0) {

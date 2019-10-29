@@ -30,6 +30,7 @@ static const double internalColour = greyColour * std::sin(((curveSize + oversho
 Rendering Code common to all bit depths
 *******************************************************************************************************/
 inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x, A_long y) {
+	if (!local) return ARGBdouble(-1, -1, -1, -1);
 	double iCount = GetBlendedPixelValue(local, x, y);
 	if(iCount >= local->activeKFB->maxIterations)  return ARGBdouble(-1, -1, -1, -1);  //Inside pixel
 
@@ -42,10 +43,10 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 	if(local->sampling) {
 		if(local->layer) {
 			//Override, use sampled layer for colours.
-			double index = (std::fmod(floor(iCount), 1024) / 1024)*(local->layer->width*local->layer->height);
-			double x = std::fmod(index, local->layer->width);
-			double y = std::floor(index / local->layer->width);
-			result = sampleLayerPixel(local, x, y);
+			const double index = (std::fmod(floor(iCount), 1024) / 1024)*(local->layer->width*local->layer->height);
+			const double x1 = std::fmod(index, local->layer->width);
+			const double y1 = std::floor(index / local->layer->width);
+			result = sampleLayerPixel(local, x1, y1);
 		}
 	}
 	else {
@@ -61,8 +62,8 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 
 	//Panels
 	double colour = greyColour;
-	double offSet = std::fmod(iCount, 1);
-	double blackSize = (local->special / 200)*0.8;
+	const double offSet = std::fmod(iCount, 1);
+	const double blackSize = (local->special / 200)*0.8;
 	if(offSet < blackSize || offSet > 1 - blackSize) {
 		//black gutter
 		colour = 0;
@@ -88,9 +89,9 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 
 
 	if(local->slopesEnabled) {
-		float distance[3][3];
-		if(local->scalingMode == 1) {
-			getDistanceIntraFrame(distance, x, y, local, true);
+		double distance[3][3]{};
+		if(local->scalingMode == 1 ) {
+			getDistanceIntraFrame(distance, x, y, local, false);
 		}
 		else {
 			GetBlendedDistanceMatrix(distance, local, x, y);
@@ -106,28 +107,25 @@ inline static ARGBdouble RenderCommon(const LocalSequenceData * local, A_long x,
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_PanelsColour::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
-	auto colour = RenderCommon(local, x, y);
+	const auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour8(local, out);
-
 
 	out->red = roundTo8Bit(colour.red * white8);
 	out->green = roundTo8Bit(colour.green * white8);
 	out->blue = roundTo8Bit(colour.blue * white8);
 	out->alpha = white8;
-
 	return PF_Err_NONE;
-
 }
 
 /*******************************************************************************************************
 Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_PanelsColour::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
-	auto colour = RenderCommon(local, x, y);
+	const auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour16(local, out);
 
 	out->red = roundTo16Bit(colour.red * white16);
@@ -142,11 +140,10 @@ PF_Err Render_PanelsColour::Render16(void * refcon, A_long x, A_long y, PF_Pixel
 Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_PanelsColour::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour32(local, out);
-
 
 	if(colour.red < 0.0) colour.red = 0.0; //Negative values causing rendering issues
 	if(colour.green < 0.0) colour.green = 0.0;
@@ -157,5 +154,4 @@ PF_Err Render_PanelsColour::Render32(void * refcon, A_long x, A_long y, PF_Pixel
 	out->blue = static_cast<float>(colour.blue);
 	out->alpha = white32;
 	return PF_Err_NONE;
-
 }

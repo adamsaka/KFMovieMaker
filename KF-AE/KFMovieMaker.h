@@ -21,6 +21,8 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef KFMOVIEMAKER_H
 #define KFMOVIEMAKER_H
 
+constexpr bool developMode = false;  //Hide parameters that are under development
+
 //Adobe SDK Setup.  All the AdobeSDK is included by including this header
 typedef unsigned char		u_char;
 typedef unsigned short		u_short;

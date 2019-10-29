@@ -45,6 +45,7 @@ enum class ParameterID : long {
 	layerSample,
 	samplingOn,
 	special,
+	mercator,
 	__last,  //Must be last (used for array memory allocation)
 };
 

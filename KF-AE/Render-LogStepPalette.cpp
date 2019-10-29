@@ -56,7 +56,7 @@ inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, 
 
 
 	if(local->slopesEnabled) {
-		float distance[3][3];
+		double distance[3][3];
 		if(local->scalingMode == 1) {
 			getDistanceIntraFrame(distance, x, y, local, true);
 		}
@@ -74,7 +74,7 @@ inline static RGBdouble RenderCommon(const LocalSequenceData * local, A_long x, 
 Render a pixel at 8-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogStepPalette::Render8(void * refcon, A_long x, A_long y, PF_Pixel8 * in, PF_Pixel8 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour8(local, out);
@@ -93,7 +93,7 @@ PF_Err Render_LogStepPalette::Render8(void * refcon, A_long x, A_long y, PF_Pixe
 Render a pixel at 16-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogStepPalette::Render16(void * refcon, A_long x, A_long y, PF_Pixel16 * in, PF_Pixel16 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour16(local, out);
@@ -110,7 +110,7 @@ PF_Err Render_LogStepPalette::Render16(void * refcon, A_long x, A_long y, PF_Pix
 Render a pixel at 32-bit colour depth.
 *******************************************************************************************************/
 PF_Err Render_LogStepPalette::Render32(void * refcon, A_long x, A_long y, PF_Pixel32 * iP, PF_Pixel32 * out) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
+	const auto* local = static_cast<LocalSequenceData*>(refcon);
 
 	auto colour = RenderCommon(local, x, y);
 	if(colour.red == -1) SetInsideColour32(local, out);
