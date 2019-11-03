@@ -21,7 +21,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 #ifndef KFMOVIEMAKER_H
 #define KFMOVIEMAKER_H
 
-constexpr bool developMode = false;  //Hide parameters that are under development
+constexpr bool developMode = true;  //Hide parameters that are under development
 
 //Adobe SDK Setup.  All the AdobeSDK is included by including this header
 typedef unsigned char		u_char;
@@ -70,9 +70,7 @@ struct RGB {
 		green = g;
 		blue = b;
 	}
-	bool operator==(const RGB& rhs) {
-		return (red == rhs.red) && (green == rhs.green) && (blue == rhs.blue);
-	}
+	bool operator==(const RGB& rhs) const = default; 
 };
 
 struct RGBdouble {
@@ -80,15 +78,13 @@ struct RGBdouble {
 	double green {0};
 	double blue {0};
 
-	RGBdouble() {};
-	RGBdouble(double r, double g, double b) {
+	RGBdouble() noexcept {};
+	RGBdouble(double r, double g, double b) noexcept {
 		red = r;
 		green = g;
 		blue = b;
 	}
-	bool operator==(const RGBdouble& rhs) {
-		return (red == rhs.red) && (green == rhs.green) && (blue == rhs.blue);
-	}
+	bool operator==(const RGBdouble& a) const = default;
 };
 
 struct ARGBdouble {
@@ -97,16 +93,14 @@ struct ARGBdouble {
 	double green {0};
 	double blue {0};
 
-	ARGBdouble() {};
-	ARGBdouble(double a, double r, double g, double b) {
+	ARGBdouble() noexcept {} ;
+	ARGBdouble(double a, double r, double g, double b) noexcept {
 		alpha = a;
 		red = r;
 		green = g;
 		blue = b;
 	}
-	bool operator==(const ARGBdouble& rhs) {
-		return (alpha==rhs.alpha) && (red == rhs.red) && (green == rhs.green) && (blue == rhs.blue);
-	}
+	bool operator==(const ARGBdouble& rhs) const noexcept = default;
 };
 
 

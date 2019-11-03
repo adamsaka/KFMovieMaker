@@ -41,8 +41,10 @@ class LocalSequenceData {
 		bool readyToRender{ false };
 		std::string kfrFileName;
 		std::vector<std::string> kfbFiles;
-		int width { 0 };
+		int width { 0 }; ///width of fractal
 		int height { 0 };
+		int layerWidth{ 0 }; //width of layer.
+		int layerHeight{ 0 };
 
 		unsigned int numKFRColours {0};
 		std::array<RGB, maxKFRColours> kfrColours;
@@ -73,6 +75,9 @@ class LocalSequenceData {
 		PF_EffectWorld * layer {nullptr};
 		double special {0};
 		bool mercator{ false };
+		long mercatorMode{ 1 };
+		double mercatorRadius{ 1 };
+
 		
 		//For sampling functions
 		PF_Sampling8Suite1 * sample8 {nullptr};
@@ -87,10 +92,16 @@ class LocalSequenceData {
 		std::shared_ptr<KFBData> nextFrameKFB {nullptr};
 		long nextFrameNumber {-1};
 		double nextZoomScale {2};
+
+		std::shared_ptr<KFBData> thirdFrameKFB{ nullptr };
+		long thirdFrameNumber{ -1 };
+		std::shared_ptr<KFBData> fourthFrameKFB{ nullptr };
+		long fourthFrameNumber{ -1 };
 		
 		WorldHolder tempImageBuffer;
-		PF_EffectWorld * mercatorInput{ nullptr }; //Mercator input image
-		PF_EffectWorld* mercatorOutput{ nullptr }; //Mercator input image
+		WorldHolder tempImageBuffer2;
+		
+		PF_EffectWorld* mercatorOutput{ nullptr }; //Mercator output image
 
 		LocalSequenceData();
 
@@ -120,7 +131,7 @@ class LocalSequenceData {
 		};
 
 		///Check if any parameters that would invalidate the cache have changed
-		bool isCacheInvalid() {
+		bool isCacheInvalid() const {
 			if(sampling) return true;
 			return !(cache_colourDivision == colourDivision &&
 					 cache_modifier == modifier &&

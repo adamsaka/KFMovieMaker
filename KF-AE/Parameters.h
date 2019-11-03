@@ -46,6 +46,10 @@ enum class ParameterID : long {
 	samplingOn,
 	special,
 	mercator,
+	topic_start_projection,
+	topic_end_projection,
+	mercatorMode,
+	radiusSize,
 	__last,  //Must be last (used for array memory allocation)
 };
 

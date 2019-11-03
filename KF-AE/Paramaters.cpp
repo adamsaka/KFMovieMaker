@@ -1,7 +1,7 @@
 /********************************************************************************************
 Parameters.cpp
 
-Author:			(c) 2019 Adam Sakareassen
+Author:			(c) 2019 Maths Town
 
 Licence:		GNU Affero General Public License
 
@@ -84,7 +84,11 @@ PF_Err ParameterSetup(PF_InData	*in_data, PF_OutData *out_data, PF_ParamDef	*par
 	AddAngle(ParameterID::slopeAngle, "Shadow Angle", 45);
 	AddGroupEnd(ParameterID::topic_end_slopes);
 	if (developMode) {
-		AddCheckBox(ParameterID::mercator, "Mercator Projection", "", false);
+		AddGroupStart(ParameterID::topic_start_projection, "Projections");
+		AddCheckBox(ParameterID::mercator, "Enable Projection", "", false);
+		AddDropDown(ParameterID::mercatorMode, "Projection Mode", "Mercator Down|Mercator Up|Mercator Left|Mercator Right", 1);
+		AddSlider(ParameterID::radiusSize, "Radius Sample Size", 1, 100, 1, 100, 4, PF_Precision_TENTHS);
+		AddGroupEnd(ParameterID::topic_end_projection);
 	}
 	out_data->num_params = paramsAdded;
 	return err;

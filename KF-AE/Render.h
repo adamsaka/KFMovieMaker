@@ -37,8 +37,8 @@ void doSlopes(double p[][3], const LocalSequenceData * local, double & r, double
 void getDistanceIntraFrame(double p[][3], A_long x, A_long y, const LocalSequenceData * local, bool minimal = false);
 ARGBdouble sampleLayerPixel(const LocalSequenceData * local, double x, double y);
 PF_Err NonSmartRender(PF_InData *in_data, PF_OutData *out_data, PF_ParamDef *params[], PF_LayerDef	*output);
-unsigned char roundTo8Bit(double f);
-unsigned short roundTo16Bit(double f);
+unsigned char roundTo8Bit(double f) noexcept ;
+unsigned short roundTo16Bit(double f) noexcept;
 void GetColours(const LocalSequenceData* local, double iCount, RGB & highColour, RGB & lowColour, double & mixWeight, bool scaleLikeKF=true);
 PF_Err SetInsideColour8(const LocalSequenceData * local, PF_Pixel8 * out);
 PF_Err SetInsideColour16(const LocalSequenceData * local, PF_Pixel16 * out);

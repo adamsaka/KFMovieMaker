@@ -151,36 +151,82 @@ void LocalSequenceData::getKFBStats() {
 /*******************************************************************************************************
 
 *******************************************************************************************************/
-void LocalSequenceData::SetupActiveKFB(long keyFrame, PF_InData *in_data) {
-	if(!readyToRender) return;
-	if(activeFrameNumber == keyFrame) return;
+void LocalSequenceData::SetupActiveKFB(long keyFrame, PF_InData* in_data) {
+	if (!readyToRender) return;
 	
-	if(nextFrameNumber == keyFrame) {
-		this->activeKFB = this->nextFrameKFB;
-		this->activeFrameNumber = keyFrame;
-	}else{ 
+
+	//Active Frame
+	if (activeFrameNumber != keyFrame) {
+		if (!mercator && activeFrameNumber >= 0) {
+			//If we are not using mercator, take a cached copy of the existing data (this will speed up reverse rendering)
+			this->thirdFrameKFB = this->fourthFrameKFB;
+			this->thirdFrameNumber = this->fourthFrameNumber;
+			this->fourthFrameKFB = this->activeKFB;
+			this->fourthFrameNumber = activeFrameNumber;
+		}
+
+		if (fourthFrameNumber == keyFrame) {
+			this->activeKFB = this->fourthFrameKFB;
+			this->activeFrameNumber = keyFrame;
+		}
+		else if (thirdFrameNumber == keyFrame) {
+			this->activeKFB = this->thirdFrameKFB;
+			this->activeFrameNumber = keyFrame;
+		}
+		else if (nextFrameNumber == keyFrame) {
+			this->activeKFB = this->nextFrameKFB;
+			this->activeFrameNumber = keyFrame;
+		}
+		else {
+			auto data = std::make_shared<KFBData>(this->width, this->height);
+			LoadKFB(data, keyFrame);
+			activeFrameNumber = keyFrame;
+			this->activeKFB = data;
+		}
+	}
+
+	//Next frame
+	const auto keyFrame2 = keyFrame + 1;
+	if (nextFrameNumber != keyFrame2 && keyFrame2 < this->kfbFiles.size()) {
+		if (fourthFrameNumber == keyFrame2) {
+			this->nextFrameKFB = this->fourthFrameKFB;
+			this->nextFrameNumber = keyFrame2;
+		}
+		else if (thirdFrameNumber == keyFrame2) {
+			this->nextFrameKFB = this->thirdFrameKFB;
+			this->nextFrameNumber = keyFrame2;
+		}
+		else {
+			auto data = std::make_shared<KFBData>(this->width, this->height);
+			LoadKFB(data, keyFrame2);
+			nextFrameNumber = keyFrame2;
+			this->nextFrameKFB = data;
+		}
+	}
+
+	//3rd Frame (mercator only).
+	const auto keyFrame3 = keyFrame + 2;
+	if (this->mercator && thirdFrameNumber != keyFrame3 && keyFrame3 < this->kfbFiles.size()) {
+		if (fourthFrameNumber == keyFrame3) {
+			this->thirdFrameKFB = this->fourthFrameKFB;
+			this->thirdFrameNumber = keyFrame3;
+		}
+		else {
+			auto data = std::make_shared<KFBData>(this->width, this->height);
+			LoadKFB(data, keyFrame3);
+			thirdFrameNumber = keyFrame3;
+			this->thirdFrameKFB = data;
+		}
+	}
+
+	//4th Frame (mercator only). 
+	const auto keyFrame4 = keyFrame + 3;
+	if (this->mercator && fourthFrameNumber != keyFrame4 && keyFrame4 < this->kfbFiles.size()) {
 		auto data = std::make_shared<KFBData>(this->width, this->height);
-		LoadKFB(data, keyFrame);
-		activeFrameNumber = keyFrame;
-		this->activeKFB = data;
+		LoadKFB(data, keyFrame4);
+		fourthFrameNumber = keyFrame3;
+		this->fourthFrameKFB = data;
 	}
-
-	//Setup next frame
-	this->nextFrameNumber = -1;
-	this->nextFrameKFB = nullptr;
-
-	if(keyFrame + 1 < this->kfbFiles.size() ) {
-		auto data = std::make_shared<KFBData>(this->width, this->height);
-		LoadKFB(data, keyFrame + 1);
-		nextFrameNumber = keyFrame  + 1;
-		this->nextFrameKFB = data;
-	}
-	else {
-		this->nextFrameKFB = nullptr;
-		this->nextFrameNumber = -1;
-
-	}
-	
 	
 }
 
@@ -189,6 +235,10 @@ void LocalSequenceData::DeleteKFBData() {
 	this->activeKFB = nullptr;
 	this->nextFrameNumber = -1;
 	this->nextFrameKFB = nullptr;
+	this->thirdFrameNumber = -1;
+	this->thirdFrameKFB = nullptr;
+	this->fourthFrameNumber = -1;
+	this->fourthFrameKFB = nullptr;
 }
 
 /*******************************************************************************************************

@@ -1,7 +1,7 @@
 /********************************************************************************************
 KF Movie Maker
 
-Author:		Adam Sakareassen
+Author:		Maths Town
 
 Credits:	skeleton.cpp from the Adobe After Effects SDK was used as a reference for this file
 

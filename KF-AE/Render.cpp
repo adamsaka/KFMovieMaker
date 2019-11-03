@@ -55,8 +55,8 @@ static void GenerateImage(PF_InData *in_data, PF_SmartRenderExtra* smartRender, 
 static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local);
 static void ScaleAroundCentre(PF_InData *in_data, PF_EffectWorld* input, PF_EffectWorld* output, const PF_Rect * rect, double scale, double postScaleX, double postScaleY, double opacity);
 static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local);
-static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld* output, LocalSequenceData* local);
-PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out);
+static void doMercator(PF_InData* in_data,  PF_EffectWorld* output, LocalSequenceData* local);
+PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out) noexcept;
 
 enum class checkoutID {
 	sampleLayer = 1
@@ -83,18 +83,37 @@ PF_Err SmartPreRender(PF_InData *in_data, PF_OutData *out_data,  PF_PreRenderExt
 		setOuputRectangle(preRender, 0, 0, 0, 0);
 		return PF_Err_NONE;
 	}
-	
+	const auto mercator = readCheckBoxParam(in_data, ParameterID::mercator);
+
+
 	auto w = sd->getWidth();
 	auto h = sd->getHeight();
-	setMaxOuputRectangle(preRender, 0, w, 0, h);
-	
-	//Calculate extents of the requested render
 	auto r = preRender->input->output_request.rect;
-	if (r.top > w || r.left > h || r.bottom < 0 || r.right < 0) {
-		setOuputRectangle(preRender, 0, 0, 0, 0);  //Outside area covered by our fractal
+
+	if (mercator)
+	{
+		setMaxOuputRectangle(preRender, 0, in_data->width, 0, in_data->height);
 	}
 	else {
-		setOuputRectangle(preRender, std::max(0, r.left), std::min(w, r.right), std::max(0, r.top), std::min(h, r.bottom));
+		setMaxOuputRectangle(preRender, 0, w, 0, h);
+	}
+	
+	//Calculate extents of the requested render
+	
+
+	
+	if (mercator){
+		//Projecting use input rectangle.
+		setOuputRectangle(preRender, std::max(0, r.left), std::min(r.right, in_data->width), std::max(0, r.top), std::min(r.bottom, in_data->height));
+	}
+	else {
+		//Not projecting, so just use fractal size.
+		if (r.top > w || r.left > h || r.bottom < 0 || r.right < 0) {
+			setOuputRectangle(preRender, 0, 0, 0, 0);  //Outside area covered by our fractal
+		}
+		else {
+			setOuputRectangle(preRender, std::max(0, r.left), std::min(w, r.right), std::max(0, r.top), std::min(h, r.bottom));
+		}
 	}
 
 	//Manage layer sampling
@@ -130,6 +149,9 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 
 	try {
 		//Read parameters.
+		local->layerWidth = in_data->width;
+		local->layerHeight = in_data->height;
+
 		local->overrideMinimalDistance = false;
 		double keyFrame = readFloatSliderParam(in_data, ParameterID::keyFrameNumber);
 		keyFrame = std::min(keyFrame, static_cast<double>(local->kfbFiles.size() - 1));
@@ -146,6 +168,8 @@ PF_Err SmartRender(PF_InData *in_data, PF_OutData *out_data, PF_SmartRenderExtra
 		local->slopesEnabled = readCheckBoxParam(in_data, ParameterID::slopesEnabled);
 		if (developMode) {
 			local->mercator = readCheckBoxParam(in_data, ParameterID::mercator);
+			local->mercatorMode = readListParam(in_data, ParameterID::mercatorMode);
+			local->mercatorRadius = readFloatSliderParam(in_data, ParameterID::radiusSize);
 		}
 		if(local->slopesEnabled) {
 			local->slopeShadowDepth = readFloatSliderParam(in_data, ParameterID::slopeShadowDepth);
@@ -305,35 +329,49 @@ artifacts.  Oversampling has dramatically improved the result.
 In theory this probably limits the output resolution to 16k x 16k, which should be fine for now.
 *******************************************************************************************************/
 static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender, PF_EffectWorld* output, LocalSequenceData * local) {
+	if (!local || !in_data || !smartRender || !output ||!local->activeKFB || !in_data->pica_basicP) throw(std::exception("Error in DoCachedImages()"));
 	
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	if(local->isCacheInvalid()) {
 		if(local->activeKFB) local->activeKFB->DisposeOfCache();
 		if(local->nextFrameKFB) local->nextFrameKFB->DisposeOfCache();
+		if(local->thirdFrameKFB) local->thirdFrameKFB->DisposeOfCache();
+		if(local->fourthFrameKFB) local->fourthFrameKFB->DisposeOfCache();
 	}
 
 	if(!local->activeKFB->isImageCached) {
 		makeKFBCachedImage(local->activeKFB, in_data, smartRender, local);
-			
+
 	}
 
 	if(local->nextFrameKFB && !local->nextFrameKFB->isImageCached) {
-		auto backup = local->activeKFB;
-		local->activeKFB = local->nextFrameKFB;
 		makeKFBCachedImage(local->nextFrameKFB, in_data, smartRender, local);
-		local->activeKFB = backup;
 	}
+	if (local->mercator &&  local->thirdFrameKFB && !local->thirdFrameKFB->isImageCached) {
+		makeKFBCachedImage(local->thirdFrameKFB, in_data, smartRender, local);
+	}
+	if (local->mercator && local->fourthFrameKFB && !local->fourthFrameKFB->isImageCached) {
+		makeKFBCachedImage(local->fourthFrameKFB, in_data, smartRender, local);
+	}
+
+
 
 	//Intermediate Render Stage
 	double nextOpacity = local->keyFramePercent;
-	
+	if (local->mercator) {
+		nextOpacity = std::min(nextOpacity * 3, 1.0);
+	}
+
 	constexpr double tempScale = 2.0;
-	const int width = static_cast<int>(tempScale * local->width / local->scaleFactorX);
-	const int height = static_cast<int>(tempScale * local->height / local->scaleFactorY);
+	const int width = static_cast<int>(tempScale * local->activeKFB->getWidth() / local->scaleFactorX);
+	const int height = static_cast<int>(tempScale * local->activeKFB->getHeight() / local->scaleFactorY);
 	
 	if(local->tempImageBuffer.handle && (local->tempImageBuffer.bitDepth != smartRender->input->bitdepth || local->tempImageBuffer.effectWorld.width != width || local->tempImageBuffer.effectWorld.height != height)) {
 		local->tempImageBuffer.Destroy();
+	}
+	if (local->tempImageBuffer2.handle && (local->tempImageBuffer2.bitDepth != smartRender->input->bitdepth || local->tempImageBuffer2.effectWorld.width != width || local->tempImageBuffer2.effectWorld.height != height)) {
+		local->tempImageBuffer2.Destroy();
 	}
 
 	if(!local->tempImageBuffer.handle) {
@@ -341,89 +379,159 @@ static void DoCachedImages(PF_InData *in_data, PF_SmartRenderExtra* smartRender,
 		switch(smartRender->input->bitdepth) {
 			case 8:
 				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &local->tempImageBuffer.handle);
-				if(err) throw (err);
 				break;
 			case 16:
 				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &local->tempImageBuffer.handle);
-				if(err) throw (err);
 				break;
 			case 32:
 				err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &local->tempImageBuffer.handle);
-				if(err) throw (err);
 				break;
 			default:
 				break;
 		}
+		if (err) throw (err);
+		
 		local->tempImageBuffer.bitDepth = smartRender->input->bitdepth;
 		err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(local->tempImageBuffer.handle, &local->tempImageBuffer.effectWorld);
 		if(err) throw (err);
 	}
-		
+
+	if (local->mercator && !local->tempImageBuffer2.handle) {
+		//Create a new "world" (aka, an image buffer).
+		switch (smartRender->input->bitdepth) {
+		case 8:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_8, width, height, &local->tempImageBuffer2.handle);
+			break;
+		case 16:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_16, width, height, &local->tempImageBuffer2.handle);
+			break;
+		case 32:
+			err = suites.WorldSuite3()->AEGP_New(NULL, AEGP_WorldType_32, width, height, &local->tempImageBuffer2.handle);
+			break;
+		default:
+			break;
+		}
+		if (err) throw (err);
+
+		local->tempImageBuffer2.bitDepth = smartRender->input->bitdepth;
+		err = suites.WorldSuite3()->AEGP_FillOutPFEffectWorld(local->tempImageBuffer2.handle, &local->tempImageBuffer2.effectWorld);
+		if (err) throw (err);
+	}
+
+	
+
+
 
 	PF_LRect rectOut {0, 0, width, height};
 	ScaleAroundCentre(in_data, &local->activeKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->activeZoomScale, 1/tempScale, 1/tempScale, 1.0);
-
 	if(local->nextFrameKFB && local->nextFrameKFB->isImageCached) {
 		ScaleAroundCentre(in_data, &local->nextFrameKFB->cachedImage, &local->tempImageBuffer.effectWorld, &rectOut, local->nextZoomScale, 1/tempScale, 1/tempScale, nextOpacity);
-
 	}
-	double scaleAdjust = 1 + (1 / local->width) * 2;
+	
 	if (!local->mercator) {
+		const double scaleAdjust = 1 + (1 / local->width) * 2;
 		ScaleAroundCentre(in_data, &local->tempImageBuffer.effectWorld, output, &smartRender->input->output_request.rect, scaleAdjust, (tempScale), tempScale, 1.0);
 	}
 	else {
-		doMercator(in_data, &local->tempImageBuffer.effectWorld, output, local);
+		//Render 2nd buffer for mercator
+		if (!local->thirdFrameKFB) throw(std::exception("Error: thirdFrameKFB invalid in DoCachedImages()"));
+		ScaleAroundCentre(in_data, &local->thirdFrameKFB->cachedImage, &local->tempImageBuffer2.effectWorld, &rectOut, local->activeZoomScale, 1 / tempScale, 1 / tempScale, 1.0);
+		if (local->fourthFrameKFB && local->fourthFrameKFB->isImageCached) {
+			ScaleAroundCentre(in_data, &local->fourthFrameKFB->cachedImage, &local->tempImageBuffer2.effectWorld, &rectOut, local->nextZoomScale, 1 / tempScale, 1 / tempScale, nextOpacity);
+		}
+
+		doMercator(in_data, output, local);
 	}
 	return;
 	
 }
 
-PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out ) {
-	auto local = reinterpret_cast<LocalSequenceData*>(refcon);
-	const auto inWidth = local->mercatorInput->width;
-	const auto inHeight = local->mercatorInput->height;
+inline PF_Pixel mixPixel(const PF_Pixel& a, const PF_Pixel& b, const double weight) noexcept{
+	PF_Pixel r{};
+	r.alpha = roundTo8Bit( static_cast<double>(a.alpha)* weight + static_cast<double>(b.alpha)* (1 - weight));
+	r.red = roundTo8Bit(static_cast<double>(a.red)* weight + static_cast<double>(b.red)* (1 - weight));
+	r.green = roundTo8Bit(static_cast<double>(a.green)* weight + static_cast<double>(b.green)* (1 - weight));
+	r.blue = roundTo8Bit(static_cast<double>(a.blue)* weight + static_cast<double>(b.blue)* (1 - weight));
+	return r;
+}
+
+PF_Err Mercator8(void* refcon, A_long x, A_long y, PF_Pixel8* in, PF_Pixel8* out ) noexcept{
+	PF_Err err = PF_Err_NONE;
+	auto local = static_cast<LocalSequenceData*>(refcon);
+	if (!local || !local->tempImageBuffer.handle || !local->tempImageBuffer2.handle) return err;
+
+	auto input1 = &local->tempImageBuffer.effectWorld;
+	auto input2 = &local->tempImageBuffer2.effectWorld;
+
+	const auto inWidth = input1->width;
+	const auto inHeight = input1->height;
 	const auto shortestEdge = std::min(inWidth, inHeight);
 
 	const auto outWidth = local->mercatorOutput->width;
 	const auto outHeight = local->mercatorOutput->height;
+	
+	const double adjustedWidth = static_cast<double>(local->layerWidth) / local->scaleFactorX;
+	const double adjustedHeight = static_cast<double>(local->layerHeight) / local->scaleFactorY;
+
 		
-	const double ang = (static_cast<double>(x) / static_cast<double>(outWidth)) * 2.0 * pi;
-	constexpr double radSize = 0.4;
-	double rad = (static_cast<double>(y) / static_cast<double>(outHeight)) ;  
-	rad = std::exp(-std::log(2.0f) * (1-rad));
-	 
-	rad = rad * static_cast<double>(shortestEdge * radSize) + static_cast<double>(shortestEdge * (0.5 - radSize));
-
-	/*double percentX = (distanceToEdgeX / static_cast<double>(local->width / 4));
-	double percentY = (distanceToEdgeY / static_cast<double>(local->height / 4));
-	double percent = std::min(percentX, percentY);
-	step = std::exp(-std::log(2.0f)*percent); //Assumes zoom size 2*/
-
-
-	const double xLoc = rad * std::cos(ang) + (inWidth / 2.0);
-	const double yLoc = rad * std::sin(ang) + (inHeight /2.0);
+	const double ang = -pi +  (static_cast<double>(x) / adjustedWidth) * 2.0 * pi;
+	const double radScale = local->mercatorRadius;
+	double rad = (static_cast<double>(y) / adjustedHeight) ;
 	
-	PF_Fixed xF = static_cast<PF_Fixed>(xLoc * 65536);
-	PF_Fixed yF = static_cast<PF_Fixed>(yLoc * 65536);
-
-	PF_SampPB sampPB{};
-	sampPB.src = local->mercatorInput;
-	PF_Pixel pixel{};
-	auto err = local->sample8->subpixel_sample(local->in_data->effect_ref, xF, yF, &sampPB, out);
+	PF_Pixel pixel1{};
+	PF_Pixel pixel2{};
 	
-	out->alpha = 255;
-	/*out->red = 255;
-	out->blue = 0;
-	out->green = 0;*/
+	rad = std::exp(-std::log(2.0f) * (1 - rad) * radScale);
+
+	if (rad > 0.20) {
+		const double radP = static_cast<double>(shortestEdge * 0.5)* rad;
+		const double xLoc = radP * std::cos(ang) + (inWidth / 2.0);
+		const double yLoc = radP * std::sin(ang) + (inHeight / 2.0);
+		const PF_Fixed xF = static_cast<PF_Fixed>(xLoc * 65536);
+		const PF_Fixed yF = static_cast<PF_Fixed>(yLoc * 65536);
+
+		PF_SampPB sampPB{};
+		sampPB.src = input1;
+		err = local->sample8->subpixel_sample(local->in_data->effect_ref, xF, yF, &sampPB, &pixel1);
+	}
+	if (rad < 0.25) {
+		
+		const double radP = static_cast<double>(shortestEdge * 0.5)* rad*4;
+		const double xLoc = radP * std::cos(ang) + (inWidth / 2.0);
+		const double yLoc = radP * std::sin(ang) + (inHeight / 2.0);
+		const PF_Fixed xF = static_cast<PF_Fixed>(xLoc * 65536);
+		const PF_Fixed yF = static_cast<PF_Fixed>(yLoc * 65536);
+
+		PF_SampPB sampPB{};
+		sampPB.src = input2;
+		err = local->sample8->subpixel_sample(local->in_data->effect_ref, xF, yF, &sampPB, &pixel2);
+	}
+	
+	if (rad > 0.2 && rad < 0.25) {
+		const double weight = (rad - 0.2) / 0.05;
+		*out = mixPixel(pixel1, pixel2, weight);
+		
+	}
+	else if (rad<0.25) {
+		*out = pixel2;
+	}
+	else {
+		*out = pixel1;
+	}
+
+	
+
+
+	
 	return err;
 }
 
 /*******************************************************************************************************
 Perform a mercator projection copy from input to output. (scaleFactor indicates size difference between input and output.)
 *******************************************************************************************************/
-static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld* output,  LocalSequenceData* local) {
+static void doMercator(PF_InData* in_data,  PF_EffectWorld* output,  LocalSequenceData* local) {
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
-	local->mercatorInput = input;
+	
 	local->mercatorOutput = output;
 
 	switch (local->bitDepth) {
@@ -451,7 +559,7 @@ static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld
 	default:
 		break;
 	}
-	local->mercatorInput = nullptr;
+	
 	local->mercatorOutput = nullptr;
 
 }
@@ -460,6 +568,7 @@ static void doMercator(PF_InData* in_data, PF_EffectWorld* input, PF_EffectWorld
 Make a chached image of the .kfb
 *******************************************************************************************************/
 static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_data, PF_SmartRenderExtra* smartRender, LocalSequenceData * local) {
+	
 	PF_Err err {PF_Err_NONE};
 	AEGP_SuiteHandler suites(in_data->pica_basicP);
 	AEFX_CLR_STRUCT(kfb->cachedImage);
@@ -491,14 +600,17 @@ static void makeKFBCachedImage(std::shared_ptr<KFBData> &  kfb, PF_InData *in_da
 	const auto backup1 = local->keyFramePercent;
 	const auto backup2 = local->activeZoomScale;
 	const auto backup3 = local->nextZoomScale;
+	const auto backupKFB = local->activeKFB;
 	local->keyFramePercent = 0;
 	local->activeZoomScale = 1;
 	local->nextZoomScale = 0;
+	local->activeKFB = kfb;
 	GenerateImage(in_data, smartRender, &kfb->cachedImage , local);
 	local->keyFramePercent = backup1;
 	local->activeZoomScale = backup2;
 	local->nextZoomScale = backup3;
-	
+	local->activeKFB = backupKFB;
+
 	kfb->isImageCached = true;
 	local->saveCachedParameters();
 }
@@ -688,7 +800,7 @@ double GetBlendedPixelValue(const LocalSequenceData* local, A_long x, A_long y) 
 /*******************************************************************************************************
 Round and clamp to an 8 bit value
 *******************************************************************************************************/
-unsigned char roundTo8Bit(double f) {
+unsigned char roundTo8Bit(double f) noexcept{
 	auto d = std::round(f);
 	int i = static_cast<int>(d);
 	if(i < black8) i = black8;
@@ -699,7 +811,7 @@ unsigned char roundTo8Bit(double f) {
 /*******************************************************************************************************
 Round and clamp to an 16 bit colour value. (note: white is 32768 in After Effects, not 0xffff)
 *******************************************************************************************************/
-unsigned short roundTo16Bit(double f) {
+unsigned short roundTo16Bit(double f) noexcept {
 	auto d = std::round(f);
 	int i = static_cast<int>(d);
 	if(i < black16) i = black16;
